@@ -1,0 +1,396 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local UIS = game:GetService("UserInputService")
+local VU = game:GetService("VirtualUser")
+
+local LP = Players.LocalPlayer
+local PGui = LP:WaitForChild("PlayerGui")
+local TAG = "XStarX3D"
+
+for _, obj in ipairs({ workspace:FindFirstChild(TAG), PGui:FindFirstChild(TAG.."G"), PGui:FindFirstChild(TAG.."R") }) do
+	if obj then pcall(function() obj:Destroy() end) end
+end
+
+local lang, themeIdx, followCam, dragOn, hubOpen, dist, isDrag, afkOn, curTab = "en", 1, true, true, true, 8.5, false, false, 1
+local noclipOn, fpsOn, moveIdx = false, false, 1
+local pinnedCF, dragOff, dragDist, statusLbl = nil, Vector3.zero, 8.5, nil
+local conns = {}
+
+local function track(c)
+	table.insert(conns, c)
+	return c
+end
+
+local Moves = {
+	{ l = "1x", w = 16, j = 50 },
+	{ l = "2x", w = 28, j = 75 },
+	{ l = "3x", w = 42, j = 100 },
+}
+
+local T = {
+	vi = {
+		hdr = "✨ XStarX 3D v0.98", pin = "📌 Theo góc", pinned = "🔒 Đã ghim", home = "Trang chủ", fun = "Giải trí", set = "Cài đặt",
+		rdy = "⚡ Kéo 3D • Phím K ẩn/hiện", rst = "⚡ Đã gọi lại 3D", ld = "⏳ Tải: %s",
+		err = "❌ Lỗi: %s", ok = "✅ Xong: %s", drg = "🖐️ Đang kéo 3D...", pnd = "🔒 Đã ghim vị trí mới",
+		heroTag = "3D SPATIAL HUB", heroSub = "Giao diện 3D mượt, kéo tự do & đa ngôn ngữ",
+		hFun = "Tab Giải trí", hFunS = "Visual, FE, Noclip, Speed & FPS", hSet = "Tab Cài đặt", hSetS = "Ngôn ngữ, theme, xa gần, kéo 3D",
+		vis = "🎨 VISUAL", fe = "⚡ FE & TIỆN ÍCH", av = "Avatar Copier", avS = "Sao chép avatar",
+		bd = "Bundles FE", bdS = "Gói đồ & anim FE", em = "Emotes & Anim", emS = "Biểu cảm & chuyển động",
+		ncp = "Noclip: %s", ncpS = "Đi xuyên vật thể", ncpC = "👻 Noclip: %s",
+		spd = "Tốc độ / Nhảy: %s", spdS = "Đổi 16/28/42 WS • 50/75/100 JP", spdC = "⚡ Di chuyển: %s",
+		fps = "FPS Boost: %s", fpsS = "Tối ưu đồ họa", fpsC = "🚀 FPS Boost: %s",
+		afk = "Anti-AFK", afkS = "Chống văng treo máy", afkOn = "✅ Anti-AFK bật",
+		on = "BẬT", off = "TẮT",
+		lng = "Ngôn ngữ / Lang", lngS = "Hiện tại: Tiếng Việt", lngChg = "🌐 Tiếng Việt",
+		cam = "Tự theo camera: %s", camS = "Bật/tắt bảng tự theo góc nhìn", camC = "📷 Tự theo camera: %s",
+		dm = "Kéo 3D: %s", dmS = "Bật/tắt kéo bảng 3D", dmC = "🖐️ Kéo 3D: %s",
+		thm = "Theme màu", thmS = "Theme: %s", thmChg = "🎨 %s",
+		dst = "Khoảng cách 3D", dstS = "Hiện tại: %s studs (7 / 8.5 / 11)", dstChg = "📏 %s studs",
+		nr = "➖ Gần hơn", fr = "➕ Xa hơn", adjC = "📏 %.1f studs",
+		rstB = "Đặt lại 3D", rstBS = "Về trước camera & bật tự theo", ret = "✨ 3D Hub",
+		themes = { "Glass sáng", "Glass tối", "Xanh băng", "Hồng pastel" }
+	},
+	en = {
+		hdr = "✨ XStarX 3D v0.98", pin = "📌 Follow", pinned = "🔒 Pinned", home = "Home", fun = "Fun", set = "Settings",
+		rdy = "⚡ 3D Drag • Key K toggle", rst = "⚡ 3D panel restored", ld = "⏳ Load: %s",
+		err = "❌ Err: %s", ok = "✅ Ran: %s", drg = "🖐️ Dragging 3D...", pnd = "🔒 Pinned new spot",
+		heroTag = "3D SPATIAL HUB", heroSub = "Smooth 3D spatial panel, free drag & bilingual UI",
+		hFun = "Fun Tab", hFunS = "Visual, FE, Noclip, Speed & FPS", hSet = "Settings Tab", hSetS = "Language, theme, distance, 3D drag",
+		vis = "🎨 VISUAL", fe = "⚡ FE & UTILS", av = "Avatar Copier", avS = "Copy avatar look",
+		bd = "Bundles FE", bdS = "FE bundles & anim", em = "Emotes & Anim", emS = "Emotes & animations",
+		ncp = "Noclip: %s", ncpS = "Walk through parts", ncpC = "👻 Noclip: %s",
+		spd = "Speed / Jump: %s", spdS = "Cycle 16/28/42 WS • 50/75/100 JP", spdC = "⚡ Move: %s",
+		fps = "FPS Boost: %s", fpsS = "Lower visual load", fpsC = "🚀 FPS Boost: %s",
+		afk = "Anti-AFK", afkS = "Prevent idle kick", afkOn = "✅ Anti-AFK on",
+		on = "ON", off = "OFF",
+		lng = "Language / Ngôn ngữ", lngS = "Current: English", lngChg = "🌐 English",
+		cam = "Auto Follow Camera: %s", camS = "Toggle panel following camera", camC = "📷 Auto Follow: %s",
+		dm = "3D Drag: %s", dmS = "Toggle dragging panel in 3D", dmC = "🖐️ 3D Drag: %s",
+		thm = "Color Theme", thmS = "Theme: %s", thmChg = "🎨 %s",
+		dst = "3D Distance", dstS = "Current: %s studs (7 / 8.5 / 11)", dstChg = "📏 %s studs",
+		nr = "➖ Closer", fr = "➕ Farther", adjC = "📏 %.1f studs",
+		rstB = "Reset 3D", rstBS = "Center & enable follow", ret = "✨ 3D Hub",
+		themes = { "Light Glass", "Dark Glass", "Ice Blue", "Pastel Pink" }
+	}
+}
+
+local Pal = {
+	{ r = Color3.fromRGB(245,247,252), rt = .08, s = Color3.new(1,1,1), h = Color3.fromRGB(234,238,246), m = Color3.fromRGB(25,30,42), b = Color3.fromRGB(85,95,115), l = Color3.new(1,1,1), d = Color3.fromRGB(22,25,34), lt = Color3.fromRGB(22,26,36), ls = Color3.fromRGB(110,120,140), a = Color3.fromRGB(65,125,255) },
+	{ r = Color3.fromRGB(20,24,34), rt = .12, s = Color3.fromRGB(95,110,140), h = Color3.fromRGB(30,36,50), m = Color3.fromRGB(242,246,255), b = Color3.fromRGB(155,168,195), l = Color3.fromRGB(36,43,60), d = Color3.fromRGB(65,125,255), lt = Color3.fromRGB(238,242,250), ls = Color3.fromRGB(150,162,188), a = Color3.fromRGB(95,150,255) },
+	{ r = Color3.fromRGB(232,246,255), rt = .08, s = Color3.new(1,1,1), h = Color3.fromRGB(212,236,252), m = Color3.fromRGB(16,42,66), b = Color3.fromRGB(58,92,122), l = Color3.fromRGB(250,253,255), d = Color3.fromRGB(24,92,156), lt = Color3.fromRGB(18,44,68), ls = Color3.fromRGB(82,114,142), a = Color3.fromRGB(32,138,235) },
+	{ r = Color3.fromRGB(255,240,247), rt = .08, s = Color3.new(1,1,1), h = Color3.fromRGB(252,224,236), m = Color3.fromRGB(64,24,42), b = Color3.fromRGB(125,68,94), l = Color3.fromRGB(255,250,252), d = Color3.fromRGB(185,62,116), lt = Color3.fromRGB(64,24,42), ls = Color3.fromRGB(142,86,112), a = Color3.fromRGB(224,82,142) },
+}
+
+local function tr(k, ...)
+	local v = T[lang][k]
+	return (type(v) == "string" and select("#", ...) > 0) and string.format(v, ...) or v
+end
+local function pal() return Pal[themeIdx] end
+local function thmName() return tr("themes")[themeIdx] end
+local function st(on) return on and tr("on") or tr("off") end
+local function tiltZ() return (UIS.TouchEnabled and not UIS.KeyboardEnabled) and math.rad(-2.5) or math.rad(-1.2) end
+
+local Folder = Instance.new("Folder"); Folder.Name = TAG; Folder.Parent = workspace
+local Part = Instance.new("Part")
+Part.Size, Part.Material, Part.Transparency, Part.Anchored = Vector3.new(10.5, 6.2, .08), Enum.Material.Glass, 1, true
+Part.CanCollide, Part.CanQuery, Part.CanTouch, Part.CastShadow, Part.Parent = false, true, true, false, Folder
+
+local Gui = Instance.new("SurfaceGui")
+Gui.Name, Gui.Face, Gui.SizingMode, Gui.PixelsPerStud = TAG.."G", Enum.NormalId.Front, Enum.SurfaceGuiSizingMode.PixelsPerStud, 65
+Gui.AlwaysOnTop, Gui.LightInfluence, Gui.ClipsDescendants, Gui.Adornee, Gui.Parent = false, 0, true, Part, PGui
+
+local function targetCF()
+	local c = workspace.CurrentCamera and workspace.CurrentCamera.CFrame
+	if not c then return Part.CFrame end
+	return CFrame.lookAt(c.Position + c.LookVector * dist + Vector3.new(0, .15, 0), c.Position, c.UpVector) * CFrame.Angles(0, 0, tiltZ())
+end
+local curCF = targetCF(); Part.CFrame = curCF
+
+local cards, secs, topBtns, segBtns, pages = {}, {}, {}, {}, {}
+local Root, Stroke, Header, TitleLbl, PinBtn, RetBtn, SegBar, Pill, PagesHolder, syncPill
+local HeroCard, HeroAccent, HeroTagLbl, HeroTitleLbl, HeroSubLbl, HeroStroke
+
+local function cardText(k)
+	if k == "thmS" then return tr(k, thmName()) end
+	if k == "dstS" then return tr(k, tostring(dist)) end
+	if k == "cam" then return tr(k, st(followCam)) end
+	if k == "dm" then return tr(k, st(dragOn)) end
+	if k == "ncp" then return tr(k, st(noclipOn)) end
+	if k == "fps" then return tr(k, st(fpsOn)) end
+	if k == "spd" then return tr(k, Moves[moveIdx].l) end
+	return tr(k)
+end
+
+local function refreshUI()
+	pcall(function()
+		local p = pal()
+		TweenService:Create(Root, TweenInfo.new(.2), { BackgroundColor3 = p.r, BackgroundTransparency = p.rt }):Play()
+		TweenService:Create(Header, TweenInfo.new(.2), { BackgroundColor3 = p.h }):Play()
+		TweenService:Create(SegBar, TweenInfo.new(.2), { BackgroundColor3 = p.h }):Play()
+		Pill.BackgroundColor3 = p.a
+		Stroke.Color, TitleLbl.TextColor3, statusLbl.TextColor3 = p.s, p.m, p.b
+		TitleLbl.Text, RetBtn.Text = tr("hdr"), tr("ret")
+		if HeroCard then
+			HeroCard.BackgroundColor3 = p.d
+			HeroStroke.Color = p.a
+			if HeroAccent then HeroAccent.BackgroundColor3 = p.a end
+			HeroTagLbl.Text, HeroTagLbl.TextColor3 = tr("heroTag"), p.a
+			HeroTitleLbl.Text, HeroTitleLbl.TextColor3 = tr("hdr"), Color3.new(1, 1, 1)
+			HeroSubLbl.Text, HeroSubLbl.TextColor3 = tr("heroSub"), Color3.fromRGB(220, 228, 245)
+		end
+		PinBtn.Text = followCam and tr("pin") or tr("pinned")
+		RetBtn.BackgroundColor3, RetBtn.TextColor3 = p.d, Color3.new(1,1,1)
+		for _, b in ipairs(topBtns) do b.BackgroundColor3, b.TextColor3 = p.l, p.m end
+		for i, sb in ipairs(segBtns) do sb.b.Text, sb.b.TextColor3 = tr(sb.k), (i == curTab) and Color3.new(1,1,1) or p.m end
+		for _, s in ipairs(secs) do s.l.Text, s.l.TextColor3 = tr(s.k), p.m end
+		for _, c in ipairs(cards) do
+			c.b.BackgroundColor3 = c.dk and p.d or p.l
+			c.t.TextColor3 = c.dk and Color3.new(1,1,1) or p.lt
+			c.s.TextColor3 = c.dk and Color3.fromRGB(225,232,248) or p.ls
+			if c.tk then c.t.Text = cardText(c.tk) end
+			if c.sk then c.s.Text = cardText(c.sk) end
+		end
+		if syncPill then task.defer(syncPill, true) end
+	end)
+end
+
+local function restore()
+	pcall(function()
+		if not Folder.Parent then Folder = Instance.new("Folder"); Folder.Name = TAG; Folder.Parent = workspace end
+		if not Part.Parent then Part.Parent = Folder end
+		if not Gui.Parent then Gui.Parent = PGui end
+		Gui.Adornee, Gui.Enabled, hubOpen, followCam, isDrag = Part, true, true, true, false
+		curCF = targetCF(); Part.CFrame = curCF
+		refreshUI(); statusLbl.Text = tr("rst")
+	end)
+end
+
+local function runUrl(name, url)
+	statusLbl.Text = tr("ld", name)
+	task.spawn(function()
+		local ok, src = pcall(function() return game:HttpGet(url) end)
+		if not ok or type(src) ~= "string" or #src == 0 then statusLbl.Text = tr("err", name); return end
+		local fn, lErr = loadstring(src)
+		if type(fn) ~= "function" then statusLbl.Text = tr("err", tostring(lErr)); return end
+		local rOk, rErr = pcall(fn)
+		statusLbl.Text = rOk and tr("ok", name) or tr("err", tostring(rErr))
+		task.delay(.5, function() if hubOpen then restore() end end)
+	end)
+end
+
+local function applyMove()
+	pcall(function()
+		local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+		if hum then hum.WalkSpeed = Moves[moveIdx].w; hum.UseJumpPower = true; hum.JumpPower = Moves[moveIdx].j end
+	end)
+end
+
+local function applyFps()
+	pcall(function()
+		if not fpsOn then return end
+		Lighting.GlobalShadows = false
+		for _, v in ipairs(workspace:GetDescendants()) do
+			if v:IsA("BasePart") then
+				v.CastShadow = false
+				if v.Material == Enum.Material.Glass or v.Material == Enum.Material.Neon then v.Material = Enum.Material.SmoothPlastic end
+			elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
+				v.Enabled = false
+			end
+		end
+	end)
+end
+
+local function corner(o, r) Instance.new("UICorner", o).CornerRadius = UDim.new(0, r or 12) end
+
+Root = Instance.new("Frame"); Root.Size, Root.BorderSizePixel, Root.Parent = UDim2.fromScale(1,1), 0, Gui; corner(Root, 22)
+Stroke = Instance.new("UIStroke"); Stroke.Thickness, Stroke.Transparency, Stroke.Parent = 2, .25, Root
+
+Header = Instance.new("Frame"); Header.Size, Header.Position, Header.BackgroundTransparency, Header.BorderSizePixel, Header.Parent = UDim2.new(1,-32,0,44), UDim2.new(0,16,0,14), .15, 0, Root; corner(Header, 999)
+TitleLbl = Instance.new("TextLabel"); TitleLbl.Size, TitleLbl.Position, TitleLbl.BackgroundTransparency, TitleLbl.Font, TitleLbl.TextSize, TitleLbl.TextXAlignment, TitleLbl.Parent = UDim2.new(0,220,1,0), UDim2.new(0,14,0,0), 1, Enum.Font.GothamBold, 14, Enum.TextXAlignment.Left, Header
+
+local function topBtn(x, w, fn)
+	local b = Instance.new("TextButton"); b.Size, b.Position, b.Font, b.TextSize, b.Parent = UDim2.new(0,w,0,30), UDim2.new(1,x,.5,-15), Enum.Font.GothamBold, 12, Header
+	corner(b, 999); b.MouseButton1Click:Connect(fn); table.insert(topBtns, b); return b
+end
+
+local function switchTab(idx, instant)
+	pcall(function()
+		if idx == curTab and not instant then return end
+		local dir = (idx >= curTab) and 1 or -1
+		curTab = idx
+		for i, sb in ipairs(segBtns) do sb.b.TextColor3 = (i == idx) and Color3.new(1,1,1) or pal().m end
+		if syncPill then syncPill(instant) end
+		for i, pg in ipairs(pages) do
+			if i == idx then
+				pg.Visible = true
+				if instant then pg.Position = UDim2.fromScale(0, 0)
+				else
+					pg.Position = UDim2.fromScale(dir * .22, 0)
+					TweenService:Create(pg, TweenInfo.new(.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = UDim2.fromScale(0, 0) }):Play()
+				end
+			elseif pg.Visible then
+				local old = pg
+				if instant then old.Visible = false; old.Position = UDim2.fromScale(0, 0)
+				else
+					local tw = TweenService:Create(old, TweenInfo.new(.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = UDim2.fromScale(-dir * .22, 0) })
+					tw:Play()
+					tw.Completed:Once(function() if curTab ~= i then old.Visible = false; old.Position = UDim2.fromScale(0, 0) end end)
+				end
+			end
+		end
+	end)
+end
+
+PinBtn = topBtn(-164, 116, function() followCam = not followCam; if not followCam then pinnedCF = Part.CFrame end; refreshUI() end)
+topBtn(-38, 30, function() hubOpen, Gui.Enabled = false, false end).Text = "✕"
+
+SegBar = Instance.new("Frame"); SegBar.Size, SegBar.Position, SegBar.BackgroundTransparency, SegBar.BorderSizePixel, SegBar.Parent = UDim2.new(1,-36,0,34), UDim2.new(0,18,0,63), .18, 0, Root; corner(SegBar, 999)
+Pill = Instance.new("Frame"); Pill.Size, Pill.Position, Pill.BorderSizePixel, Pill.ZIndex, Pill.Parent = UDim2.new(0,80,0,28), UDim2.new(0,3,0,3), 0, 2, SegBar; corner(Pill, 999)
+
+local segL = Instance.new("UIListLayout"); segL.FillDirection, segL.HorizontalAlignment, segL.VerticalAlignment, segL.Padding, segL.Parent = Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center, UDim.new(0,4), SegBar
+local segP = Instance.new("UIPadding"); segP.PaddingLeft, segP.PaddingRight, segP.Parent = UDim.new(0,3), UDim.new(0,3), SegBar
+
+local function addSeg(i, key)
+	local b = Instance.new("TextButton"); b.Size, b.BackgroundTransparency, b.Font, b.TextSize, b.ZIndex, b.AutoButtonColor, b.Parent = UDim2.new(0,104,0,28), 1, Enum.Font.GothamBold, 11, 3, false, SegBar
+	corner(b, 999); table.insert(segBtns, { b = b, k = key })
+	b.MouseButton1Click:Connect(function() switchTab(i, false) end)
+end
+addSeg(1, "home"); addSeg(2, "fun"); addSeg(3, "set")
+
+syncPill = function(instant)
+	pcall(function()
+		local sb = segBtns[curTab] and segBtns[curTab].b
+		if not sb then return end
+		local gp = UDim2.new(0, sb.AbsolutePosition.X - SegBar.AbsolutePosition.X, 0.5, -14)
+		local gs = UDim2.new(0, sb.AbsoluteSize.X, 0, 28)
+		if instant then Pill.Position, Pill.Size = gp, gs
+		else TweenService:Create(Pill, TweenInfo.new(.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = gp, Size = gs }):Play() end
+	end)
+end
+
+statusLbl = Instance.new("TextLabel"); statusLbl.Size, statusLbl.Position, statusLbl.BackgroundTransparency, statusLbl.Font, statusLbl.TextSize, statusLbl.TextXAlignment, statusLbl.Parent = UDim2.new(1,-36,0,22), UDim2.new(0,18,0,101), 1, Enum.Font.GothamMedium, 12, Enum.TextXAlignment.Left, Root
+PagesHolder = Instance.new("Frame"); PagesHolder.Size, PagesHolder.Position, PagesHolder.BackgroundTransparency, PagesHolder.ClipsDescendants, PagesHolder.Parent = UDim2.new(1,-36,1,-134), UDim2.new(0,18,0,126), 1, true, Root
+
+local function card(par, tk, sk, dk, fn)
+	local b = Instance.new("TextButton"); b.Size, b.AutoButtonColor, b.Text, b.Parent = UDim2.new(1,0,0,46), false, "", par; corner(b, 12)
+	local t = Instance.new("TextLabel"); t.Size, t.Position, t.BackgroundTransparency, t.Font, t.TextSize, t.TextXAlignment, t.Parent = UDim2.new(1,-20,0,19), UDim2.new(0,12,0,5), 1, Enum.Font.GothamBold, 13, Enum.TextXAlignment.Left, b
+	local s = Instance.new("TextLabel"); s.Size, s.Position, s.BackgroundTransparency, s.Font, s.TextSize, s.TextXAlignment, s.Parent = UDim2.new(1,-20,0,15), UDim2.new(0,12,0,25), 1, Enum.Font.Gotham, 11, Enum.TextXAlignment.Left, b
+	table.insert(cards, { b=b, t=t, s=s, tk=tk, sk=sk, dk=dk })
+	b.MouseButton1Click:Connect(function()
+		TweenService:Create(b, TweenInfo.new(.1), { BackgroundColor3 = pal().a }):Play()
+		task.delay(.15, function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = dk and pal().d or pal().l }):Play() end)
+		fn()
+	end)
+end
+
+local function page(vis, scroll, cs)
+	local f = Instance.new(scroll and "ScrollingFrame" or "Frame")
+	f.Size, f.Position, f.BackgroundTransparency, f.Visible, f.Parent = UDim2.fromScale(1,1), UDim2.fromScale(0,0), 1, vis, PagesHolder
+	if scroll then f.ScrollBarThickness, f.CanvasSize = 4, UDim2.new(0,0,0,cs or 460) end
+	Instance.new("UIListLayout", f).Padding = UDim.new(0,8)
+	table.insert(pages, f); return f
+end
+
+local function sec(par, k)
+	local l = Instance.new("TextLabel"); l.Size, l.BackgroundTransparency, l.Font, l.TextSize, l.TextXAlignment, l.Parent = UDim2.new(1,0,0,20), 1, Enum.Font.GothamBold, 12, Enum.TextXAlignment.Left, par
+	table.insert(secs, { l=l, k=k })
+end
+
+local pHome = page(true, false)
+HeroCard = Instance.new("Frame"); HeroCard.Size, HeroCard.BorderSizePixel, HeroCard.ClipsDescendants, HeroCard.Parent = UDim2.new(1, 0, 0, 74), 0, true, pHome; corner(HeroCard, 14)
+HeroStroke = Instance.new("UIStroke"); HeroStroke.Thickness, HeroStroke.Transparency, HeroStroke.Parent = 1.2, .35, HeroCard
+HeroAccent = Instance.new("Frame"); HeroAccent.Size, HeroAccent.Position, HeroAccent.BorderSizePixel, HeroAccent.Parent = UDim2.new(0, 4, 1, -20), UDim2.new(0, 10, 0, 10), 0, HeroCard; corner(HeroAccent, 999)
+HeroTagLbl = Instance.new("TextLabel"); HeroTagLbl.Size, HeroTagLbl.Position, HeroTagLbl.BackgroundTransparency, HeroTagLbl.Font, HeroTagLbl.TextSize, HeroTagLbl.TextXAlignment, HeroTagLbl.Parent = UDim2.new(1, -34, 0, 14), UDim2.new(0, 22, 0, 8), 1, Enum.Font.GothamBold, 10, Enum.TextXAlignment.Left, HeroCard
+HeroTitleLbl = Instance.new("TextLabel"); HeroTitleLbl.Size, HeroTitleLbl.Position, HeroTitleLbl.BackgroundTransparency, HeroTitleLbl.Font, HeroTitleLbl.TextSize, HeroTitleLbl.TextXAlignment, HeroTitleLbl.Parent = UDim2.new(1, -34, 0, 22), UDim2.new(0, 22, 0, 22), 1, Enum.Font.GothamBold, 17, Enum.TextXAlignment.Left, HeroCard
+HeroSubLbl = Instance.new("TextLabel"); HeroSubLbl.Size, HeroSubLbl.Position, HeroSubLbl.BackgroundTransparency, HeroSubLbl.Font, HeroSubLbl.TextSize, HeroSubLbl.TextXAlignment, HeroSubLbl.Parent = UDim2.new(1, -34, 0, 18), UDim2.new(0, 22, 0, 46), 1, Enum.Font.Gotham, 11, Enum.TextXAlignment.Left, HeroCard
+
+card(pHome, "hFun", "hFunS", true, function() switchTab(2, false) end)
+card(pHome, "hSet", "hSetS", false, function() switchTab(3, false) end)
+
+local pFun = page(false, true, 540)
+sec(pFun, "vis")
+card(pFun, "av", "avS", true, function() runUrl("Avatar Copier", "https://api.lyraez.lol/loader") end)
+card(pFun, "fps", "fpsS", false, function() fpsOn = not fpsOn; if fpsOn then applyFps() end; refreshUI(); statusLbl.Text = tr("fpsC", st(fpsOn)) end)
+sec(pFun, "fe")
+card(pFun, "bd", "bdS", false, function() runUrl("Bundles FE", "https://api.luarmor.net/files/v4/loaders/2b1a1e4dd23e3419902187e162baf26f.lua") end)
+card(pFun, "em", "emS", false, function() runUrl("Emotes & Anim", "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua") end)
+card(pFun, "ncp", "ncpS", false, function() noclipOn = not noclipOn; refreshUI(); statusLbl.Text = tr("ncpC", st(noclipOn)) end)
+card(pFun, "spd", "spdS", false, function() moveIdx = (moveIdx % #Moves) + 1; applyMove(); refreshUI(); statusLbl.Text = tr("spdC", Moves[moveIdx].l) end)
+card(pFun, "afk", "afkS", false, function()
+	if not afkOn then
+		afkOn = true
+		track(LP.Idled:Connect(function() pcall(function() VU:CaptureController(); VU:ClickButton2(Vector2.new()) end) end))
+	end
+	statusLbl.Text = tr("afkOn")
+end)
+
+local pSet = page(false, true, 520)
+card(pSet, "lng", "lngS", true, function() lang = (lang == "vi") and "en" or "vi"; refreshUI(); statusLbl.Text = tr("lngChg") end)
+card(pSet, "thm", "thmS", false, function() themeIdx = (themeIdx % #Pal) + 1; refreshUI(); statusLbl.Text = tr("thmChg", thmName()) end)
+card(pSet, "cam", "camS", false, function() followCam = not followCam; if not followCam then pinnedCF = Part.CFrame end; refreshUI(); statusLbl.Text = tr("camC", st(followCam)) end)
+card(pSet, "dm", "dmS", false, function() dragOn = not dragOn; if not dragOn then isDrag = false end; refreshUI(); statusLbl.Text = tr("dmC", st(dragOn)) end)
+card(pSet, "dst", "dstS", false, function() dist = (dist < 8) and 8.5 or ((dist < 10) and 11 or 7); dragDist = dist; refreshUI(); statusLbl.Text = tr("dstChg", tostring(dist)) end)
+card(pSet, "nr", "dstS", false, function() dist = math.clamp(dist - 1, 5, 16); dragDist = dist; refreshUI(); statusLbl.Text = tr("adjC", dist) end)
+card(pSet, "fr", "dstS", false, function() dist = math.clamp(dist + 1, 5, 16); dragDist = dist; refreshUI(); statusLbl.Text = tr("adjC", dist) end)
+card(pSet, "rstB", "rstBS", false, restore)
+
+local function rayPt(pos, d)
+	local c = workspace.CurrentCamera; if not c then return Part.Position end
+	local r = c:ViewportPointToRay(pos.X, pos.Y); return r.Origin + r.Direction * d
+end
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Include
+rayParams.FilterDescendantsInstances = { Part }
+
+track(UIS.InputBegan:Connect(function(inp, gp)
+	if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
+		local c = workspace.CurrentCamera
+		if dragOn and c and hubOpen and Gui.Enabled and Part.Parent then
+			local r = c:ViewportPointToRay(inp.Position.X, inp.Position.Y)
+			local hit = workspace:Raycast(r.Origin, r.Direction * 120, rayParams)
+			if hit and hit.Instance == Part then
+				isDrag, followCam = true, false; refreshUI()
+				dragDist = math.clamp((hit.Position - c.CFrame.Position).Magnitude, 4, 24)
+				dragOff = Part.Position - hit.Position; statusLbl.Text = tr("drg"); return
+			end
+		end
+	elseif not gp and inp.KeyCode == Enum.KeyCode.K then
+		hubOpen = not hubOpen; Gui.Enabled = hubOpen; if hubOpen then restore() end
+	end
+end))
+
+track(UIS.InputChanged:Connect(function(inp)
+	if isDrag and dragOn and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
+		local c = workspace.CurrentCamera; if not c then return end
+		local cf = CFrame.lookAt(rayPt(inp.Position, dragDist) + dragOff, c.CFrame.Position, c.CFrame.UpVector) * CFrame.Angles(0, 0, tiltZ())
+		pinnedCF, curCF, Part.CFrame = cf, cf, cf
+	end
+end))
+
+track(UIS.InputEnded:Connect(function(inp)
+	if isDrag and (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then
+		isDrag = false; if pinnedCF then curCF = pinnedCF end; statusLbl.Text = tr("pnd")
+	end
+end))
+
+local RGui = Instance.new("ScreenGui"); RGui.Name, RGui.ResetOnSpawn, RGui.Parent = TAG.."R", false, PGui
+RetBtn = Instance.new("TextButton"); RetBtn.Size, RetBtn.Position, RetBtn.BackgroundTransparency, RetBtn.Font, RetBtn.TextSize, RetBtn.Parent = UDim2.new(0,96,0,32), UDim2.new(0,14,.5,-16), .2, Enum.Font.GothamBold, 12, RGui
+corner(RetBtn, 999); RetBtn.MouseButton1Click:Connect(restore)
+
+track(LP.CharacterAdded:Connect(function() task.wait(.4); applyMove(); if fpsOn then applyFps() end end))
+
+refreshUI()
+statusLbl.Text = tr("rdy")
+track(RunService.RenderStepped:Connect(function(dt)
+	if noclipOn and LP.Character then
+		for _, v in ipairs(LP.Character:GetDescendants()) do
+			if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
+		end
+	end
+	if not Folder.Parent or not Part.Parent or isDrag then return end
+	curCF = curCF:Lerp(followCam and targetCF() or (pinnedCF or curCF), math.clamp(dt * 9, 0, 1))
+	Part.CFrame = curCF
+end))
