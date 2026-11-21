@@ -35,8 +35,9 @@ local T = {
 		rdy = "⚡ Kéo 3D • Phím K ẩn/hiện", rst = "⚡ Đã gọi lại 3D", ld = "⏳ Tải: %s",
 		err = "❌ Lỗi: %s", ok = "✅ Xong: %s", drg = "🖐️ Đang kéo 3D...", pnd = "🔒 Đã ghim vị trí mới",
 		heroTag = "3D SPATIAL HUB", heroSub = "Giao diện 3D mượt, kéo tự do & đa ngôn ngữ",
-		hFun = "Tab Giải trí", hFunS = "Visual, FE, Noclip, Speed & FPS", hSet = "Tab Cài đặt", hSetS = "Ngôn ngữ, theme, xa gần, kéo 3D",
-		vis = "🎨 VISUAL", fe = "⚡ FE & TIỆN ÍCH", av = "Avatar Copier", avS = "Sao chép avatar",
+		hFun = "Tab Giải trí", hFunS = "Avatar Copier, Bundles FE & Emotes/Anim", hSet = "Tab Cài đặt", hSetS = "Ngôn ngữ, theme, xa gần, kéo 3D",
+		sFun = "🎭 SCRIPT & ANIM", sUt = "⚡ TIỆN ÍCH",
+		av = "Avatar Copier", avS = "Sao chép avatar",
 		bd = "Bundles FE", bdS = "Gói đồ & anim FE", em = "Emotes & Anim", emS = "Biểu cảm & chuyển động",
 		ncp = "Noclip: %s", ncpS = "Đi xuyên vật thể", ncpC = "👻 Noclip: %s",
 		spd = "Tốc độ / Nhảy: %s", spdS = "Đổi 16/28/42 WS • 50/75/100 JP", spdC = "⚡ Di chuyển: %s",
@@ -57,8 +58,9 @@ local T = {
 		rdy = "⚡ 3D Drag • Key K toggle", rst = "⚡ 3D panel restored", ld = "⏳ Load: %s",
 		err = "❌ Err: %s", ok = "✅ Ran: %s", drg = "🖐️ Dragging 3D...", pnd = "🔒 Pinned new spot",
 		heroTag = "3D SPATIAL HUB", heroSub = "Smooth 3D spatial panel, free drag & bilingual UI",
-		hFun = "Fun Tab", hFunS = "Visual, FE, Noclip, Speed & FPS", hSet = "Settings Tab", hSetS = "Language, theme, distance, 3D drag",
-		vis = "🎨 VISUAL", fe = "⚡ FE & UTILS", av = "Avatar Copier", avS = "Copy avatar look",
+		hFun = "Fun Tab", hFunS = "Avatar Copier, Bundles FE & Emotes/Anim", hSet = "Settings Tab", hSetS = "Language, theme, distance, 3D drag",
+		sFun = "🎭 SCRIPTS & ANIM", sUt = "⚡ UTILITIES",
+		av = "Avatar Copier", avS = "Copy avatar look",
 		bd = "Bundles FE", bdS = "FE bundles & anim", em = "Emotes & Anim", emS = "Emotes & animations",
 		ncp = "Noclip: %s", ncpS = "Walk through parts", ncpC = "👻 Noclip: %s",
 		spd = "Speed / Jump: %s", spdS = "Cycle 16/28/42 WS • 50/75/100 JP", spdC = "⚡ Move: %s",
@@ -298,7 +300,8 @@ local function sec(par, k)
 	table.insert(secs, { l=l, k=k })
 end
 
-local pHome = page(true, false)
+-- HOME: các tiện ích còn lại + lối tắt sang Fun & Settings
+local pHome = page(true, true, 460)
 HeroCard = Instance.new("Frame"); HeroCard.Size, HeroCard.BorderSizePixel, HeroCard.ClipsDescendants, HeroCard.Parent = UDim2.new(1, 0, 0, 74), 0, true, pHome; corner(HeroCard, 14)
 HeroStroke = Instance.new("UIStroke"); HeroStroke.Thickness, HeroStroke.Transparency, HeroStroke.Parent = 1.2, .35, HeroCard
 HeroAccent = Instance.new("Frame"); HeroAccent.Size, HeroAccent.Position, HeroAccent.BorderSizePixel, HeroAccent.Parent = UDim2.new(0, 4, 1, -20), UDim2.new(0, 10, 0, 10), 0, HeroCard; corner(HeroAccent, 999)
@@ -306,26 +309,28 @@ HeroTagLbl = Instance.new("TextLabel"); HeroTagLbl.Size, HeroTagLbl.Position, He
 HeroTitleLbl = Instance.new("TextLabel"); HeroTitleLbl.Size, HeroTitleLbl.Position, HeroTitleLbl.BackgroundTransparency, HeroTitleLbl.Font, HeroTitleLbl.TextSize, HeroTitleLbl.TextXAlignment, HeroTitleLbl.Parent = UDim2.new(1, -34, 0, 22), UDim2.new(0, 22, 0, 22), 1, Enum.Font.GothamBold, 17, Enum.TextXAlignment.Left, HeroCard
 HeroSubLbl = Instance.new("TextLabel"); HeroSubLbl.Size, HeroSubLbl.Position, HeroSubLbl.BackgroundTransparency, HeroSubLbl.Font, HeroSubLbl.TextSize, HeroSubLbl.TextXAlignment, HeroSubLbl.Parent = UDim2.new(1, -34, 0, 18), UDim2.new(0, 22, 0, 46), 1, Enum.Font.Gotham, 11, Enum.TextXAlignment.Left, HeroCard
 
-card(pHome, "hFun", "hFunS", true, function() switchTab(2, false) end)
-card(pHome, "hSet", "hSetS", false, function() switchTab(3, false) end)
-
-local pFun = page(false, true, 540)
-sec(pFun, "vis")
-card(pFun, "av", "avS", true, function() runUrl("Avatar Copier", "https://api.lyraez.lol/loader") end)
-card(pFun, "fps", "fpsS", false, function() fpsOn = not fpsOn; if fpsOn then applyFps() end; refreshUI(); statusLbl.Text = tr("fpsC", st(fpsOn)) end)
-sec(pFun, "fe")
-card(pFun, "bd", "bdS", false, function() runUrl("Bundles FE", "https://api.luarmor.net/files/v4/loaders/2b1a1e4dd23e3419902187e162baf26f.lua") end)
-card(pFun, "em", "emS", false, function() runUrl("Emotes & Anim", "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua") end)
-card(pFun, "ncp", "ncpS", false, function() noclipOn = not noclipOn; refreshUI(); statusLbl.Text = tr("ncpC", st(noclipOn)) end)
-card(pFun, "spd", "spdS", false, function() moveIdx = (moveIdx % #Moves) + 1; applyMove(); refreshUI(); statusLbl.Text = tr("spdC", Moves[moveIdx].l) end)
-card(pFun, "afk", "afkS", false, function()
+sec(pHome, "sUt")
+card(pHome, "ncp", "ncpS", true, function() noclipOn = not noclipOn; refreshUI(); statusLbl.Text = tr("ncpC", st(noclipOn)) end)
+card(pHome, "spd", "spdS", false, function() moveIdx = (moveIdx % #Moves) + 1; applyMove(); refreshUI(); statusLbl.Text = tr("spdC", Moves[moveIdx].l) end)
+card(pHome, "fps", "fpsS", false, function() fpsOn = not fpsOn; if fpsOn then applyFps() end; refreshUI(); statusLbl.Text = tr("fpsC", st(fpsOn)) end)
+card(pHome, "afk", "afkS", false, function()
 	if not afkOn then
 		afkOn = true
 		track(LP.Idled:Connect(function() pcall(function() VU:CaptureController(); VU:ClickButton2(Vector2.new()) end) end))
 	end
 	statusLbl.Text = tr("afkOn")
 end)
+card(pHome, "hFun", "hFunS", false, function() switchTab(2, false) end)
+card(pHome, "hSet", "hSetS", false, function() switchTab(3, false) end)
 
+-- FUN: chỉ có Avatar Copier, Bundles FE & Emotes/Anim
+local pFun = page(false, false)
+sec(pFun, "sFun")
+card(pFun, "av", "avS", true, function() runUrl("Avatar Copier", "https://api.lyraez.lol/loader") end)
+card(pFun, "bd", "bdS", false, function() runUrl("Bundles FE", "https://api.luarmor.net/files/v4/loaders/2b1a1e4dd23e3419902187e162baf26f.lua") end)
+card(pFun, "em", "emS", false, function() runUrl("Emotes & Anim", "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua") end)
+
+-- SETTINGS
 local pSet = page(false, true, 520)
 card(pSet, "lng", "lngS", true, function() lang = (lang == "vi") and "en" or "vi"; refreshUI(); statusLbl.Text = tr("lngChg") end)
 card(pSet, "thm", "thmS", false, function() themeIdx = (themeIdx % #Pal) + 1; refreshUI(); statusLbl.Text = tr("thmChg", thmName()) end)
