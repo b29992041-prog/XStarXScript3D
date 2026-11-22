@@ -1,13 +1,7 @@
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local Lighting = game:GetService("Lighting")
-local HttpService = game:GetService("HttpService")
 local UIS = game:GetService("UserInputService")
-local VU = game:GetService("VirtualUser")
-
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1573931367379509319/GtBlT10skL7W6DzUl6BxWfDKDZp--qhA1E4Kegs5kiAn4iweL1Au_FJWSpO2ipGyXH_h"
-local COOLDOWN_SEC = 15
 
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
@@ -17,73 +11,47 @@ for _, o in ipairs({ workspace:FindFirstChild(TAG), PGui:FindFirstChild(TAG.."G"
 	if o then pcall(function() o:Destroy() end) end
 end
 
-local lang, themeIdx, followCam, dragOn, hubOpen, dist, isDrag, afkOn, curTab = "en", 1, true, true, true, 8.5, false, false, 1
-local noclipOn, fpsOn, moveIdx, lastSend = false, false, 1, 0
+local lang, themeIdx, followCam, dragOn, hubOpen, dist, isDrag, curTab = "en", 1, true, true, true, 8.5, false, 1
 local pinnedCF, dragOff, dragDist, statusLbl = nil, Vector3.zero, 8.5, nil
-local conns, cards, secs, topBtns, segBtns, pages = {}, {}, {}, {}, {}, {}
+local joyActive, joyVec, joyTouch = false, Vector2.zero, nil
+local fcStarted, fcGui, fcPart, fcToggle, fcSpeed = false, nil, nil, nil, 1.0
+local origMinZ, origMaxZ = LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance
+local conns, secs, topBtns, segBtns, pages, cards = {}, {}, {}, {}, {}, {}
 
 local function track(c) table.insert(conns, c); return c end
 
-local Moves = { { l = "1x", w = 16, j = 50 }, { l = "2x", w = 28, j = 75 }, { l = "3x", w = 42, j = 100 } }
-
 local T = {
 	vi = {
-		hdr = "✨ XStarX 3D v0.98", pin = "📌 Theo góc", pinned = "🔒 Đã ghim", home = "Trang chủ", fun = "Giải trí", set = "Cài đặt",
-		rdy = "⚡ Kéo 3D • Phím K ẩn/hiện", rst = "⚡ Đã gọi lại 3D", ld = "⏳ Tải: %s",
+		hdr = "✨ XStarX 3D v1.01", pin = "📌 Theo góc", pinned = "🔒 Đã ghim", home = "Home", scr = "Script",
+		rdy = "⚡ Kéo 3D • Phím K ẩn/hiện", rst = "⚡ Script", ld = "⏳ Tải: %s",
 		err = "❌ Lỗi: %s", ok = "✅ Xong: %s", drg = "🖐️ Đang kéo 3D...", pnd = "🔒 Đã ghim vị trí mới",
 		heroTag = "3D SPATIAL HUB", heroSub = "Giao diện 3D mượt, kéo tự do & đa ngôn ngữ",
-		hFun = "Tab Giải trí", hFunS = "Avatar Copier, Bundles FE & Emotes/Anim", hSet = "Tab Cài đặt", hSetS = "Ngôn ngữ, theme, xa gần, kéo 3D",
-		sFun = "🎭 SCRIPT & ANIM", sUt = "⚡ TIỆN ÍCH", sFb = "💬 GÓP Ý DISCORD",
-		av = "Avatar Copier", avS = "Sao chép avatar", bd = "Bundles FE", bdS = "Gói đồ & anim FE", em = "Emotes & Anim", emS = "Biểu cảm & chuyển động",
-		ncp = "Noclip: %s", ncpS = "Đi xuyên vật thể", ncpC = "👻 Noclip: %s",
-		spd = "Tốc độ / Nhảy: %s", spdS = "Đổi 16/28/42 WS • 50/75/100 JP", spdC = "⚡ Di chuyển: %s",
-		fps = "FPS Boost: %s", fpsS = "Tối ưu đồ họa", fpsC = "🚀 FPS Boost: %s",
-		afk = "Anti-AFK", afkS = "Chống văng treo máy", afkOn = "✅ Anti-AFK bật", on = "BẬT", off = "TẮT",
-		fbPh = "Nhập góp ý gửi tới Discord...", fbSend = "📤 Gửi góp ý lên Discord", fbSendS = "Gửi kèm tên & PlaceId",
-		fbEmpty = "⚠️ Nhập nội dung góp ý trước", fbWait = "⏳ Chờ %ds rồi gửi tiếp",
-		fbNoUrl = "⚠️ Chưa gắn link Webhook", fbNoReq = "❌ Executor không hỗ trợ HTTP",
-		fbSent = "✅ Đã gửi góp ý lên Discord", fbFail = "❌ Gửi góp ý thất bại",
-		lng = "Ngôn ngữ / Lang", lngS = "Hiện tại: Tiếng Việt", lngChg = "🌐 Tiếng Việt",
-		cam = "Tự theo camera: %s", camS = "Bật/tắt bảng tự theo góc nhìn", camC = "📷 Tự theo camera: %s",
-		dm = "Kéo 3D: %s", dmS = "Bật/tắt kéo bảng 3D", dmC = "🖐️ Kéo 3D: %s",
-		thm = "Theme màu", thmS = "Theme: %s", thmChg = "🎨 %s",
-		dst = "Khoảng cách 3D", dstS = "Hiện tại: %s studs (7 / 8.5 / 11)", dstChg = "📏 %s studs",
-		nr = "➖ Gần hơn", fr = "➕ Xa hơn", adjC = "📏 %.1f studs",
-		rstB = "Đặt lại 3D", rstBS = "Về trước camera & bật tự theo", ret = "✨ 3D Hub",
-		themes = { "Glass sáng", "Glass tối", "Xanh băng", "Hồng pastel" }
+		hScr = "Mở danh sách Script", hScrS = "Avatar Copier, Bundles FE, Emotes & Freecam",
+		sScr = "🎭 SCRIPTS & ANIM",
+		av = "Avatar Copier", avS = "Copy avatar look",
+		bd = "Bundles FE", bdS = "FE bundles & anim",
+		em = "Emotes & Anim", emS = "Emotes & animations",
+		fc = "Freecam + Joystick", fcS = "Tốc độ thập phân không giới hạn • TP tới cam",
+		ret = "Script"
 	},
 	en = {
-		hdr = "✨ XStarX 3D v0.98", pin = "📌 Follow", pinned = "🔒 Pinned", home = "Home", fun = "Fun", set = "Settings",
-		rdy = "⚡ 3D Drag • Key K toggle", rst = "⚡ 3D panel restored", ld = "⏳ Load: %s",
+		hdr = "✨ XStarX 3D v1.01", pin = "📌 Follow", pinned = "🔒 Pinned", home = "Home", scr = "Script",
+		rdy = "⚡ 3D Drag • Key K toggle", rst = "⚡ Script", ld = "⏳ Load: %s",
 		err = "❌ Err: %s", ok = "✅ Ran: %s", drg = "🖐️ Dragging 3D...", pnd = "🔒 Pinned new spot",
 		heroTag = "3D SPATIAL HUB", heroSub = "Smooth 3D spatial panel, free drag & bilingual UI",
-		hFun = "Fun Tab", hFunS = "Avatar Copier, Bundles FE & Emotes/Anim", hSet = "Settings Tab", hSetS = "Language, theme, distance, 3D drag",
-		sFun = "🎭 SCRIPTS & ANIM", sUt = "⚡ UTILITIES", sFb = "💬 DISCORD FEEDBACK",
-		av = "Avatar Copier", avS = "Copy avatar look", bd = "Bundles FE", bdS = "FE bundles & anim", em = "Emotes & Anim", emS = "Emotes & animations",
-		ncp = "Noclip: %s", ncpS = "Walk through parts", ncpC = "👻 Noclip: %s",
-		spd = "Speed / Jump: %s", spdS = "Cycle 16/28/42 WS • 50/75/100 JP", spdC = "⚡ Move: %s",
-		fps = "FPS Boost: %s", fpsS = "Lower visual load", fpsC = "🚀 FPS Boost: %s",
-		afk = "Anti-AFK", afkS = "Prevent idle kick", afkOn = "✅ Anti-AFK on", on = "ON", off = "OFF",
-		fbPh = "Type feedback for Discord...", fbSend = "📤 Send Feedback to Discord", fbSendS = "Includes user & PlaceId",
-		fbEmpty = "⚠️ Enter feedback text first", fbWait = "⏳ Wait %ds before sending again",
-		fbNoUrl = "⚠️ Webhook URL not set", fbNoReq = "❌ Executor lacks HTTP request",
-		fbSent = "✅ Feedback sent to Discord", fbFail = "❌ Failed to send feedback",
-		lng = "Language / Ngôn ngữ", lngS = "Current: English", lngChg = "🌐 English",
-		cam = "Auto Follow Camera: %s", camS = "Toggle panel following camera", camC = "📷 Auto Follow: %s",
-		dm = "3D Drag: %s", dmS = "Toggle dragging panel in 3D", dmC = "🖐️ 3D Drag: %s",
-		thm = "Color Theme", thmS = "Theme: %s", thmChg = "🎨 %s",
-		dst = "3D Distance", dstS = "Current: %s studs (7 / 8.5 / 11)", dstChg = "📏 %s studs",
-		nr = "➖ Closer", fr = "➕ Farther", adjC = "📏 %.1f studs",
-		rstB = "Reset 3D", rstBS = "Center & enable follow", ret = "✨ 3D Hub",
-		themes = { "Light Glass", "Dark Glass", "Ice Blue", "Pastel Pink" }
+		hScr = "Open Script list", hScrS = "Avatar Copier, Bundles FE, Emotes & Freecam",
+		sScr = "🎭 SCRIPTS & ANIM",
+		av = "Avatar Copier", avS = "Copy avatar look",
+		bd = "Bundles FE", bdS = "FE bundles & anim",
+		em = "Emotes & Anim", emS = "Emotes & animations",
+		fc = "Freecam + Joystick", fcS = "Unlimited decimal speed • TP to cam",
+		ret = "Script"
 	}
 }
 
 local Pal = {
 	{ r = Color3.fromRGB(245,247,252), rt = .08, s = Color3.new(1,1,1), h = Color3.fromRGB(234,238,246), m = Color3.fromRGB(25,30,42), b = Color3.fromRGB(85,95,115), l = Color3.new(1,1,1), d = Color3.fromRGB(22,25,34), lt = Color3.fromRGB(22,26,36), ls = Color3.fromRGB(110,120,140), a = Color3.fromRGB(65,125,255) },
 	{ r = Color3.fromRGB(20,24,34), rt = .12, s = Color3.fromRGB(95,110,140), h = Color3.fromRGB(30,36,50), m = Color3.fromRGB(242,246,255), b = Color3.fromRGB(155,168,195), l = Color3.fromRGB(36,43,60), d = Color3.fromRGB(65,125,255), lt = Color3.fromRGB(238,242,250), ls = Color3.fromRGB(150,162,188), a = Color3.fromRGB(95,150,255) },
-	{ r = Color3.fromRGB(232,246,255), rt = .08, s = Color3.new(1,1,1), h = Color3.fromRGB(212,236,252), m = Color3.fromRGB(16,42,66), b = Color3.fromRGB(58,92,122), l = Color3.fromRGB(250,253,255), d = Color3.fromRGB(24,92,156), lt = Color3.fromRGB(18,44,68), ls = Color3.fromRGB(82,114,142), a = Color3.fromRGB(32,138,235) },
-	{ r = Color3.fromRGB(255,240,247), rt = .08, s = Color3.new(1,1,1), h = Color3.fromRGB(252,224,236), m = Color3.fromRGB(64,24,42), b = Color3.fromRGB(125,68,94), l = Color3.fromRGB(255,250,252), d = Color3.fromRGB(185,62,116), lt = Color3.fromRGB(64,24,42), ls = Color3.fromRGB(142,86,112), a = Color3.fromRGB(224,82,142) },
 }
 
 -- UI Helpers
@@ -100,7 +68,6 @@ local function pd(o, l, r, t, b) return mk("UIPadding", { PaddingLeft = UDim.new
 
 local function tr(k, ...) local v = T[lang][k]; return (type(v) == "string" and select("#", ...) > 0) and string.format(v, ...) or v end
 local function pal() return Pal[themeIdx] end
-local function st(on) return on and tr("on") or tr("off") end
 local function tiltZ() return (UIS.TouchEnabled and not UIS.KeyboardEnabled) and math.rad(-2.5) or math.rad(-1.2) end
 
 local Folder = mk("Folder", { Name = TAG }, workspace)
@@ -121,10 +88,7 @@ local function targetCF()
 end
 local curCF = targetCF(); Part.CFrame = curCF
 
-local syncPill, fbBox
-local mapCard = { thmS = function() return tr("thmS", tr("themes")[themeIdx]) end, dstS = function() return tr("dstS", tostring(dist)) end, cam = function() return tr("cam", st(followCam)) end, dm = function() return tr("dm", st(dragOn)) end, ncp = function() return tr("ncp", st(noclipOn)) end, fps = function() return tr("fps", st(fpsOn)) end, spd = function() return tr("spd", Moves[moveIdx].l) end }
-local function cardText(k) return mapCard[k] and mapCard[k]() or tr(k) end
-
+local syncPill
 local Root = mk("Frame", { Size = UDim2.fromScale(1,1), BorderSizePixel = 0 }, Gui); cr(Root, 22)
 local Stroke = sk(Root, 2, .25)
 local Header = mk("Frame", { Size = UDim2.new(1,-32,0,44), Position = UDim2.new(0,16,0,14), BackgroundTransparency = .15, BorderSizePixel = 0 }, Root); cr(Header, 999)
@@ -144,6 +108,25 @@ local HeroTagLbl = mk("TextLabel", { Size = UDim2.new(1,-34,0,14), Position = UD
 local HeroTitleLbl = mk("TextLabel", { Size = UDim2.new(1,-34,0,22), Position = UDim2.new(0,22,0,22), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left }, HeroCard)
 local HeroSubLbl = mk("TextLabel", { Size = UDim2.new(1,-34,0,18), Position = UDim2.new(0,22,0,46), BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, HeroCard)
 
+-- Nút gọi 3D + Joystick (bên phải để tránh che nút di chuyển trái dưới)
+local RGui = mk("ScreenGui", { Name = TAG.."R", ResetOnSpawn = false }, PGui)
+local RetBtn = mk("TextButton", { Size = UDim2.new(0,88,0,30), Position = UDim2.new(1,-102,0.56,0), BackgroundTransparency = .2, Font = Enum.Font.GothamBold, TextSize = 12 }, RGui)
+cr(RetBtn, 999)
+
+local joystickContainer = mk("Frame", { Size = UDim2.fromScale(1,1), BackgroundTransparency = 1 }, RGui)
+local sizeOuter, sizeInner = 110, 45
+local outer = mk("Frame", {
+	Size = UDim2.fromOffset(sizeOuter, sizeOuter), Position = UDim2.new(0.84, 0, 0.75, 0), AnchorPoint = Vector2.new(0.5, 0.5),
+	BackgroundColor3 = Color3.fromRGB(15, 15, 20), BackgroundTransparency = 0.4, ZIndex = 1, Active = true
+}, joystickContainer)
+cr(outer, 999); sk(outer, 1.5, 0.5, Color3.fromRGB(100, 100, 120))
+
+local inner = mk("Frame", {
+	Size = UDim2.fromOffset(sizeInner, sizeInner), Position = UDim2.new(0.5, -sizeInner/2, 0.5, -sizeInner/2),
+	BackgroundColor3 = Color3.fromRGB(240, 240, 255), BackgroundTransparency = 0.1, ZIndex = 2
+}, outer)
+cr(inner, 999)
+
 local function refreshUI()
 	pcall(function()
 		local p = pal()
@@ -151,11 +134,12 @@ local function refreshUI()
 		TweenService:Create(Header, TweenInfo.new(.2), { BackgroundColor3 = p.h }):Play()
 		TweenService:Create(SegBar, TweenInfo.new(.2), { BackgroundColor3 = p.h }):Play()
 		Pill.BackgroundColor3, Stroke.Color, TitleLbl.TextColor3, statusLbl.TextColor3 = p.a, p.s, p.m, p.b
-		TitleLbl.Text, HeroCard.BackgroundColor3, HeroStroke.Color, HeroAccent.BackgroundColor3 = tr("hdr"), p.d, p.a, p.a
+		TitleLbl.Text, RetBtn.Text = tr("hdr"), tr("ret")
+		RetBtn.BackgroundColor3, RetBtn.TextColor3 = p.d, Color3.new(1,1,1)
+		HeroCard.BackgroundColor3, HeroStroke.Color, HeroAccent.BackgroundColor3 = p.d, p.a, p.a
 		HeroTagLbl.Text, HeroTagLbl.TextColor3 = tr("heroTag"), p.a
 		HeroTitleLbl.Text, HeroTitleLbl.TextColor3 = tr("hdr"), Color3.new(1,1,1)
 		HeroSubLbl.Text, HeroSubLbl.TextColor3 = tr("heroSub"), Color3.fromRGB(220,228,245)
-		if fbBox then fbBox.BackgroundColor3, fbBox.TextColor3, fbBox.PlaceholderText = p.l, p.lt, tr("fbPh") end
 		for _, b in ipairs(topBtns) do b.BackgroundColor3, b.TextColor3 = p.l, p.m end
 		for i, sb in ipairs(segBtns) do sb.b.Text, sb.b.TextColor3 = tr(sb.k), (i == curTab) and Color3.new(1,1,1) or p.m end
 		for _, s in ipairs(secs) do s.l.Text, s.l.TextColor3 = tr(s.k), p.m end
@@ -163,8 +147,8 @@ local function refreshUI()
 			c.b.BackgroundColor3 = c.dk and p.d or p.l
 			c.t.TextColor3 = c.dk and Color3.new(1,1,1) or p.lt
 			c.s.TextColor3 = c.dk and Color3.fromRGB(225,232,248) or p.ls
-			if c.tk then c.t.Text = cardText(c.tk) end
-			if c.sk then c.s.Text = cardText(c.sk) end
+			if c.tk then c.t.Text = tr(c.tk) end
+			if c.sk then c.s.Text = tr(c.sk) end
 		end
 		if syncPill then task.defer(syncPill, true) end
 	end)
@@ -180,6 +164,141 @@ local function restore()
 	end)
 end
 
+RetBtn.MouseButton1Click:Connect(restore)
+
+local function updateJoy(pos)
+	local center = outer.AbsolutePosition + outer.AbsoluteSize * 0.5
+	local maxR = (sizeOuter - sizeInner) * 0.5
+	local delta = pos - center
+	local clamped = delta.Magnitude > maxR and (delta.Unit * maxR) or delta
+	inner.Position = UDim2.new(0.5, clamped.X - sizeInner/2, 0.5, clamped.Y - sizeInner/2)
+	joyVec = maxR > 0 and (clamped / maxR) or Vector2.zero
+end
+
+local function resetJoy()
+	joyActive, joyTouch, joyVec = false, nil, Vector2.zero
+	inner.Position = UDim2.new(0.5, -sizeInner/2, 0.5, -sizeInner/2)
+	if pinnedCF then curCF = pinnedCF end
+end
+
+track(outer.InputBegan:Connect(function(inp)
+	if inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+		if not hubOpen or not Gui.Enabled then restore() end
+		joyActive, joyTouch, followCam = true, inp, false
+		pinnedCF = pinnedCF or Part.CFrame
+		updateJoy(inp.Position)
+		statusLbl.Text = tr("drg")
+	end
+end))
+
+track(UIS.InputChanged:Connect(function(inp)
+	if joyActive and inp == joyTouch then updateJoy(inp.Position) end
+end))
+
+track(UIS.InputEnded:Connect(function(inp)
+	if joyActive and inp == joyTouch then resetJoy(); statusLbl.Text = tr("pnd") end
+end))
+
+-- Freecam + Joystick (nhập tốc độ không giới hạn kể cả số thập phân)
+local function openFreecam()
+	if fcStarted and fcGui then fcGui.Enabled = true; statusLbl.Text = tr("ok", "Freecam"); return end
+	fcStarted = true
+	local cam = workspace.CurrentCamera
+	fcPart = mk("Part", { Size = Vector3.zero, Anchored = true, Transparency = 1, CanCollide = false, CFrame = cam.CFrame, Name = "XStarXCamPart" }, workspace)
+	local curPos = fcPart.Position
+	fcToggle = true
+	local fcJoyAct, fcJoyTouch, fcDir, fcLvl = false, nil, Vector3.zero, 0
+
+	fcGui = mk("ScreenGui", { Name = "XStarXFreecamUI", ResetOnSpawn = false }, PGui)
+	local panel = mk("Frame", { Size = UDim2.fromOffset(200, 140), Position = UDim2.fromOffset(40, 40), BackgroundColor3 = Color3.fromRGB(18,18,22), BackgroundTransparency = 0.15, Active = true, Draggable = true }, fcGui)
+	cr(panel, 12); sk(panel, 1.5, 0, Color3.fromRGB(45,45,55))
+	mk("TextLabel", { Size = UDim2.new(1,-20,0,22), Position = UDim2.fromOffset(10,6), BackgroundTransparency = 1, TextColor3 = Color3.fromRGB(150,150,170), Font = Enum.Font.GothamBold, TextSize = 11, Text = "FREECAM CONTROL", TextXAlignment = Enum.TextXAlignment.Left }, panel)
+
+	local tBtn = mk("TextButton", { Size = UDim2.new(1,-20,0,30), Position = UDim2.fromOffset(10,32), BackgroundColor3 = Color3.fromRGB(0,136,255), TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 12, Text = "FREECAM: ON" }, panel); cr(tBtn, 8)
+	local tpBtn = mk("TextButton", { Size = UDim2.new(1,-20,0,28), Position = UDim2.fromOffset(10,68), BackgroundColor3 = Color3.fromRGB(45,45,55), TextColor3 = Color3.fromRGB(220,220,240), Font = Enum.Font.GothamBold, TextSize = 11, Text = "TELEPORT TO CAM" }, panel); cr(tpBtn, 8)
+
+	local spRow = mk("Frame", { Size = UDim2.new(1,-20,0,26), Position = UDim2.fromOffset(10,102), BackgroundTransparency = 1 }, panel)
+	mk("TextLabel", { Size = UDim2.fromScale(0.45,1), BackgroundTransparency = 1, TextColor3 = Color3.fromRGB(200,200,210), Font = Enum.Font.GothamMedium, TextSize = 12, Text = "Speed:", TextXAlignment = Enum.TextXAlignment.Left }, spRow)
+	local spBox = mk("TextBox", { Size = UDim2.fromScale(0.55,1), Position = UDim2.fromScale(0.45,0), BackgroundColor3 = Color3.fromRGB(35,35,45), TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 12, Text = tostring(fcSpeed), ClearTextOnFocus = false }, spRow)
+	cr(spBox, 6); sk(spBox, 1, 0, Color3.fromRGB(60,60,75))
+
+	local fcJoyWrap = mk("Frame", { Size = UDim2.fromScale(1,1), BackgroundTransparency = 1 }, fcGui)
+	local fOutSize, fInSize = 110, 45
+	local fOut = mk("Frame", { Size = UDim2.fromOffset(fOutSize,fOutSize), Position = UDim2.new(0.15,0,0.75,0), AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = Color3.fromRGB(15,15,20), BackgroundTransparency = 0.4, ZIndex = 1, Active = true }, fcJoyWrap)
+	cr(fOut, 999); sk(fOut, 1.5, 0.5, Color3.fromRGB(100,100,120))
+	local fIn = mk("Frame", { Size = UDim2.fromOffset(fInSize,fInSize), Position = UDim2.new(0.5,-fInSize/2,0.5,-fInSize/2), BackgroundColor3 = Color3.fromRGB(240,240,255), BackgroundTransparency = 0.1, ZIndex = 2 }, fOut); cr(fIn, 999)
+
+	local function syncFc()
+		local c = workspace.CurrentCamera
+		if fcToggle then
+			c.CameraSubject = fcPart; c.CameraType = Enum.CameraType.Custom
+			LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance = 0, 0
+			tBtn.Text, tBtn.BackgroundColor3, fcJoyWrap.Visible = "FREECAM: ON", Color3.fromRGB(0,136,255), true
+		else
+			c.CameraSubject = LP.Character and LP.Character:FindFirstChild("Humanoid") or nil
+			LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance = origMinZ, origMaxZ
+			tBtn.Text, tBtn.BackgroundColor3, fcJoyWrap.Visible = "FREECAM: OFF", Color3.fromRGB(60,60,70), false
+		end
+	end
+
+	spBox.FocusLost:Connect(function()
+		local cleaned = tostring(spBox.Text):gsub(",", "."):match("%-?%d+%.?%d*")
+		local n = tonumber(cleaned)
+		if n and n > 0 then fcSpeed = n end
+		spBox.Text = tostring(fcSpeed)
+	end)
+
+	tpBtn.MouseButton1Click:Connect(function()
+		local hrp = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+		if hrp and fcPart then hrp.CFrame = fcPart.CFrame + Vector3.new(0, 3, 0) end
+	end)
+
+	tBtn.MouseButton1Click:Connect(function()
+		fcToggle = not fcToggle
+		if fcToggle then curPos = workspace.CurrentCamera.CFrame.Position; fcPart.CFrame = workspace.CurrentCamera.CFrame end
+		syncFc()
+	end)
+
+	local function updFcJoy(pos)
+		local ctr = fOut.AbsolutePosition + fOut.AbsoluteSize * 0.5
+		local rad = fOutSize * 0.5
+		local d = pos - ctr
+		local mag = math.min(d.Magnitude, rad)
+		local off = d.Magnitude > 0 and d.Unit * mag or Vector2.zero
+		fIn.Position = UDim2.new(0.5, off.X - fInSize/2, 0.5, off.Y - fInSize/2)
+		fcLvl = math.floor((mag / rad) * 100)
+		fcDir = Vector3.new(off.X / rad, 0, off.Y / rad)
+	end
+
+	track(fOut.InputBegan:Connect(function(inp)
+		if not fcJoyAct and (inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseButton1) then
+			fcJoyAct, fcJoyTouch = true, inp; updFcJoy(inp.Position)
+		end
+	end))
+	track(UIS.InputChanged:Connect(function(inp) if fcJoyAct and inp == fcJoyTouch then updFcJoy(inp.Position) end end))
+	track(UIS.InputEnded:Connect(function(inp)
+		if fcJoyAct and inp == fcJoyTouch then
+			fcJoyAct, fcJoyTouch, fcLvl, fcDir = false, nil, 0, Vector3.zero
+			fIn.Position = UDim2.new(0.5, -fInSize/2, 0.5, -fInSize/2)
+		end
+	end))
+
+	track(RunService.RenderStepped:Connect(function(dt)
+		if not fcGui.Enabled or not fcToggle or not fcPart then return end
+		local c = workspace.CurrentCamera
+		if fcLvl > 1 then
+			local moveSpd = (fcLvl * 0.02) * fcSpeed
+			local moveDir = (c.CFrame.LookVector * -fcDir.Z) + (c.CFrame.RightVector * fcDir.X) + Vector3.new(0, fcDir.Y, 0)
+			if moveDir.Magnitude > 0 then curPos += moveDir.Unit * moveSpd * dt * 60 end
+		end
+		local lk = c.CFrame.LookVector
+		fcPart.CFrame = CFrame.new(curPos) * CFrame.Angles(0, math.atan2(lk.X, lk.Z), 0)
+	end))
+
+	syncFc()
+	statusLbl.Text = tr("ok", "Freecam")
+end
+
 local function runUrl(name, url)
 	statusLbl.Text = tr("ld", name)
 	task.spawn(function()
@@ -190,50 +309,6 @@ local function runUrl(name, url)
 		local rOk, rErr = pcall(fn)
 		statusLbl.Text = rOk and tr("ok", name) or tr("err", tostring(rErr))
 		task.delay(.5, function() if hubOpen then restore() end end)
-	end)
-end
-
-local function sendFeedback()
-	local msg = fbBox and string.gsub(fbBox.Text, "^%s*(.-)%s*$", "%1") or ""
-	if #msg == 0 then statusLbl.Text = tr("fbEmpty"); return end
-	local now = os.clock()
-	if now - lastSend < COOLDOWN_SEC then statusLbl.Text = tr("fbWait", math.ceil(COOLDOWN_SEC - (now - lastSend))); return end
-	if not WEBHOOK_URL:match("^https://discord%.com/api/webhooks/") then statusLbl.Text = tr("fbNoUrl"); return end
-	local reqFn = (type(request) == "function" and request) or (type(http_request) == "function" and http_request) or (syn and type(syn.request) == "function" and syn.request)
-	if not reqFn then statusLbl.Text = tr("fbNoReq"); return end
-	lastSend = now
-	task.spawn(function()
-		local body = HttpService:JSONEncode({
-			username = "XStarX 3D v0.98",
-			content = string.format("**User:** %s (`%d`) | **PlaceId:** `%d`\n**Feedback:** %s", LP.Name, LP.UserId, game.PlaceId, string.sub(msg, 1, 1500))
-		})
-		local ok, res = pcall(reqFn, { Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
-		if ok and res and (res.StatusCode == 200 or res.StatusCode == 204 or not res.StatusCode) then
-			if fbBox then fbBox.Text = "" end
-			statusLbl.Text = tr("fbSent")
-		else
-			statusLbl.Text = tr("fbFail")
-		end
-	end)
-end
-
-local function applyMove()
-	pcall(function()
-		local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-		if hum then hum.WalkSpeed = Moves[moveIdx].w; hum.UseJumpPower = true; hum.JumpPower = Moves[moveIdx].j end
-	end)
-end
-
-local function applyFps()
-	pcall(function()
-		if not fpsOn then return end
-		Lighting.GlobalShadows = false
-		for _, v in ipairs(workspace:GetDescendants()) do
-			if v:IsA("BasePart") then
-				v.CastShadow = false
-				if v.Material == Enum.Material.Glass or v.Material == Enum.Material.Neon then v.Material = Enum.Material.SmoothPlastic end
-			elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false end
-		end
 	end)
 end
 
@@ -268,7 +343,7 @@ end
 local PinBtn = topBtn(-164, 116, function() followCam = not followCam; if not followCam then pinnedCF = Part.CFrame end; PinBtn.Text = followCam and tr("pin") or tr("pinned") end)
 topBtn(-38, 30, function() hubOpen, Gui.Enabled = false, false end).Text = "✕"
 
-for i, k in ipairs({ "home", "fun", "set" }) do
+for i, k in ipairs({ "home", "scr" }) do
 	local b = mk("TextButton", { Size = UDim2.new(0,104,0,28), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 11, ZIndex = 3, AutoButtonColor = false }, SegBar)
 	cr(b, 999); table.insert(segBtns, { b = b, k = k }); b.MouseButton1Click:Connect(function() switchTab(i, false) end)
 end
@@ -305,40 +380,16 @@ local function mkCard(par, tk, sk, dk, fn)
 	end)
 end
 
--- HOME: tiện ích còn lại + lối tắt
-local pHome = mkPage(true, 460); HeroCard.Parent = pHome; mkSec(pHome, "sUt")
-mkCard(pHome, "ncp", "ncpS", true, function() noclipOn = not noclipOn; refreshUI(); statusLbl.Text = tr("ncpC", st(noclipOn)) end)
-mkCard(pHome, "spd", "spdS", false, function() moveIdx = (moveIdx % #Moves) + 1; applyMove(); refreshUI(); statusLbl.Text = tr("spdC", Moves[moveIdx].l) end)
-mkCard(pHome, "fps", "fpsS", false, function() fpsOn = not fpsOn; if fpsOn then applyFps() end; refreshUI(); statusLbl.Text = tr("fpsC", st(fpsOn)) end)
-mkCard(pHome, "afk", "afkS", false, function()
-	if not afkOn then afkOn = true; track(LP.Idled:Connect(function() pcall(function() VU:CaptureController(); VU:ClickButton2(Vector2.new()) end) end)) end
-	statusLbl.Text = tr("afkOn")
-end)
-mkCard(pHome, "hFun", "hFunS", false, function() switchTab(2, false) end)
-mkCard(pHome, "hSet", "hSetS", false, function() switchTab(3, false) end)
+-- HOME
+local pHome = mkPage(true); HeroCard.Parent = pHome
+mkCard(pHome, "hScr", "hScrS", true, function() switchTab(2, false) end)
 
--- FUN: chỉ có Avatar Copier, Bundles FE & Emotes/Anim
-local pFun = mkPage(false); mkSec(pFun, "sFun")
-mkCard(pFun, "av", "avS", true, function() runUrl("Avatar Copier", "https://api.lyraez.lol/loader") end)
-mkCard(pFun, "bd", "bdS", false, function() runUrl("Bundles FE", "https://api.luarmor.net/files/v4/loaders/2b1a1e4dd23e3419902187e162baf26f.lua") end)
-mkCard(pFun, "em", "emS", false, function() runUrl("Emotes & Anim", "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua") end)
-
--- SETTINGS + GÓP Ý DISCORD
-local pSet = mkPage(false, 640)
-local function setDist(v) dist = v; dragDist = v; refreshUI(); statusLbl.Text = tr("adjC", dist) end
-mkCard(pSet, "lng", "lngS", true, function() lang = (lang == "vi") and "en" or "vi"; refreshUI(); statusLbl.Text = tr("lngChg") end)
-mkCard(pSet, "thm", "thmS", false, function() themeIdx = (themeIdx % #Pal) + 1; refreshUI(); statusLbl.Text = tr("thmChg", tr("themes")[themeIdx]) end)
-mkCard(pSet, "cam", "camS", false, function() followCam = not followCam; if not followCam then pinnedCF = Part.CFrame end; refreshUI(); statusLbl.Text = tr("camC", st(followCam)) end)
-mkCard(pSet, "dm", "dmS", false, function() dragOn = not dragOn; if not dragOn then isDrag = false end; refreshUI(); statusLbl.Text = tr("dmC", st(dragOn)) end)
-mkCard(pSet, "dst", "dstS", false, function() setDist((dist < 8) and 8.5 or ((dist < 10) and 11 or 7)); statusLbl.Text = tr("dstChg", tostring(dist)) end)
-mkCard(pSet, "nr", "dstS", false, function() setDist(math.clamp(dist - 1, 5, 16)) end)
-mkCard(pSet, "fr", "dstS", false, function() setDist(math.clamp(dist + 1, 5, 16)) end)
-mkCard(pSet, "rstB", "rstBS", false, restore)
-
-mkSec(pSet, "sFb")
-fbBox = mk("TextBox", { Size = UDim2.new(1,0,0,40), ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, Text = "" }, pSet)
-cr(fbBox, 12); pd(fbBox, 12)
-mkCard(pSet, "fbSend", "fbSendS", true, sendFeedback)
+-- SCRIPT
+local pScr = mkPage(false, 260); mkSec(pScr, "sScr")
+mkCard(pScr, "av", "avS", true, function() runUrl("Avatar Copier", "https://api.lyraez.lol/loader") end)
+mkCard(pScr, "bd", "bdS", false, function() runUrl("Bundles FE", "https://api.luarmor.net/files/v4/loaders/2b1a1e4dd23e3419902187e162baf26f.lua") end)
+mkCard(pScr, "em", "emS", false, function() runUrl("Emotes & Anim", "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua") end)
+mkCard(pScr, "fc", "fcS", false, openFreecam)
 
 local rayParams = RaycastParams.new()
 rayParams.FilterType, rayParams.FilterDescendantsInstances = Enum.RaycastFilterType.Include, { Part }
@@ -375,21 +426,20 @@ track(UIS.InputEnded:Connect(function(inp)
 	end
 end))
 
-local RGui = mk("ScreenGui", { Name = TAG.."R", ResetOnSpawn = false }, PGui)
-local RetBtn = mk("TextButton", { Size = UDim2.new(0,96,0,32), Position = UDim2.new(0,14,.5,-16), BackgroundTransparency = .2, Font = Enum.Font.GothamBold, TextSize = 12 }, RGui)
-cr(RetBtn, 999); RetBtn.MouseButton1Click:Connect(restore)
-
-track(LP.CharacterAdded:Connect(function() task.wait(.4); applyMove(); if fpsOn then applyFps() end end))
-
-refreshUI(); PinBtn.Text = followCam and tr("pin") or tr("pinned"); RetBtn.Text = tr("ret"); statusLbl.Text = tr("rdy")
+refreshUI(); PinBtn.Text = followCam and tr("pin") or tr("pinned"); statusLbl.Text = tr("rdy")
 
 track(RunService.RenderStepped:Connect(function(dt)
-	if noclipOn and LP.Character then
-		for _, v in ipairs(LP.Character:GetDescendants()) do
-			if v:IsA("BasePart") and v.CanCollide then v.CanCollide = false end
+	if not Folder.Parent or not Part.Parent or isDrag then return end
+	if joyActive and joyVec.Magnitude > 0.02 then
+		local c = workspace.CurrentCamera
+		if c then
+			local move = (c.CFrame.RightVector * joyVec.X - c.CFrame.UpVector * joyVec.Y) * (dt * 7)
+			pinnedCF = (pinnedCF or Part.CFrame) + move
+			curCF = curCF:Lerp(pinnedCF, math.clamp(dt * 14, 0, 1))
+			Part.CFrame = curCF
+			return
 		end
 	end
-	if not Folder.Parent or not Part.Parent or isDrag then return end
 	curCF = curCF:Lerp(followCam and targetCF() or (pinnedCF or curCF), math.clamp(dt * 9, 0, 1))
 	Part.CFrame = curCF
 end))
