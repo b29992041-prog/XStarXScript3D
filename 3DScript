@@ -2,32 +2,29 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
+local HttpService = game:GetService("HttpService")
 local UIS = game:GetService("UserInputService")
 local VU = game:GetService("VirtualUser")
+
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1573931367379509319/GtBlT10skL7W6DzUl6BxWfDKDZp--qhA1E4Kegs5kiAn4iweL1Au_FJWSpO2ipGyXH_h"
+local COOLDOWN_SEC = 15
 
 local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
 local TAG = "XStarX3D"
 
-for _, obj in ipairs({ workspace:FindFirstChild(TAG), PGui:FindFirstChild(TAG.."G"), PGui:FindFirstChild(TAG.."R") }) do
-	if obj then pcall(function() obj:Destroy() end) end
+for _, o in ipairs({ workspace:FindFirstChild(TAG), PGui:FindFirstChild(TAG.."G"), PGui:FindFirstChild(TAG.."R") }) do
+	if o then pcall(function() o:Destroy() end) end
 end
 
 local lang, themeIdx, followCam, dragOn, hubOpen, dist, isDrag, afkOn, curTab = "en", 1, true, true, true, 8.5, false, false, 1
-local noclipOn, fpsOn, moveIdx = false, false, 1
+local noclipOn, fpsOn, moveIdx, lastSend = false, false, 1, 0
 local pinnedCF, dragOff, dragDist, statusLbl = nil, Vector3.zero, 8.5, nil
-local conns = {}
+local conns, cards, secs, topBtns, segBtns, pages = {}, {}, {}, {}, {}, {}
 
-local function track(c)
-	table.insert(conns, c)
-	return c
-end
+local function track(c) table.insert(conns, c); return c end
 
-local Moves = {
-	{ l = "1x", w = 16, j = 50 },
-	{ l = "2x", w = 28, j = 75 },
-	{ l = "3x", w = 42, j = 100 },
-}
+local Moves = { { l = "1x", w = 16, j = 50 }, { l = "2x", w = 28, j = 75 }, { l = "3x", w = 42, j = 100 } }
 
 local T = {
 	vi = {
@@ -36,14 +33,16 @@ local T = {
 		err = "❌ Lỗi: %s", ok = "✅ Xong: %s", drg = "🖐️ Đang kéo 3D...", pnd = "🔒 Đã ghim vị trí mới",
 		heroTag = "3D SPATIAL HUB", heroSub = "Giao diện 3D mượt, kéo tự do & đa ngôn ngữ",
 		hFun = "Tab Giải trí", hFunS = "Avatar Copier, Bundles FE & Emotes/Anim", hSet = "Tab Cài đặt", hSetS = "Ngôn ngữ, theme, xa gần, kéo 3D",
-		sFun = "🎭 SCRIPT & ANIM", sUt = "⚡ TIỆN ÍCH",
-		av = "Avatar Copier", avS = "Sao chép avatar",
-		bd = "Bundles FE", bdS = "Gói đồ & anim FE", em = "Emotes & Anim", emS = "Biểu cảm & chuyển động",
+		sFun = "🎭 SCRIPT & ANIM", sUt = "⚡ TIỆN ÍCH", sFb = "💬 GÓP Ý DISCORD",
+		av = "Avatar Copier", avS = "Sao chép avatar", bd = "Bundles FE", bdS = "Gói đồ & anim FE", em = "Emotes & Anim", emS = "Biểu cảm & chuyển động",
 		ncp = "Noclip: %s", ncpS = "Đi xuyên vật thể", ncpC = "👻 Noclip: %s",
 		spd = "Tốc độ / Nhảy: %s", spdS = "Đổi 16/28/42 WS • 50/75/100 JP", spdC = "⚡ Di chuyển: %s",
 		fps = "FPS Boost: %s", fpsS = "Tối ưu đồ họa", fpsC = "🚀 FPS Boost: %s",
-		afk = "Anti-AFK", afkS = "Chống văng treo máy", afkOn = "✅ Anti-AFK bật",
-		on = "BẬT", off = "TẮT",
+		afk = "Anti-AFK", afkS = "Chống văng treo máy", afkOn = "✅ Anti-AFK bật", on = "BẬT", off = "TẮT",
+		fbPh = "Nhập góp ý gửi tới Discord...", fbSend = "📤 Gửi góp ý lên Discord", fbSendS = "Gửi kèm tên & PlaceId",
+		fbEmpty = "⚠️ Nhập nội dung góp ý trước", fbWait = "⏳ Chờ %ds rồi gửi tiếp",
+		fbNoUrl = "⚠️ Chưa gắn link Webhook", fbNoReq = "❌ Executor không hỗ trợ HTTP",
+		fbSent = "✅ Đã gửi góp ý lên Discord", fbFail = "❌ Gửi góp ý thất bại",
 		lng = "Ngôn ngữ / Lang", lngS = "Hiện tại: Tiếng Việt", lngChg = "🌐 Tiếng Việt",
 		cam = "Tự theo camera: %s", camS = "Bật/tắt bảng tự theo góc nhìn", camC = "📷 Tự theo camera: %s",
 		dm = "Kéo 3D: %s", dmS = "Bật/tắt kéo bảng 3D", dmC = "🖐️ Kéo 3D: %s",
@@ -59,14 +58,16 @@ local T = {
 		err = "❌ Err: %s", ok = "✅ Ran: %s", drg = "🖐️ Dragging 3D...", pnd = "🔒 Pinned new spot",
 		heroTag = "3D SPATIAL HUB", heroSub = "Smooth 3D spatial panel, free drag & bilingual UI",
 		hFun = "Fun Tab", hFunS = "Avatar Copier, Bundles FE & Emotes/Anim", hSet = "Settings Tab", hSetS = "Language, theme, distance, 3D drag",
-		sFun = "🎭 SCRIPTS & ANIM", sUt = "⚡ UTILITIES",
-		av = "Avatar Copier", avS = "Copy avatar look",
-		bd = "Bundles FE", bdS = "FE bundles & anim", em = "Emotes & Anim", emS = "Emotes & animations",
+		sFun = "🎭 SCRIPTS & ANIM", sUt = "⚡ UTILITIES", sFb = "💬 DISCORD FEEDBACK",
+		av = "Avatar Copier", avS = "Copy avatar look", bd = "Bundles FE", bdS = "FE bundles & anim", em = "Emotes & Anim", emS = "Emotes & animations",
 		ncp = "Noclip: %s", ncpS = "Walk through parts", ncpC = "👻 Noclip: %s",
 		spd = "Speed / Jump: %s", spdS = "Cycle 16/28/42 WS • 50/75/100 JP", spdC = "⚡ Move: %s",
 		fps = "FPS Boost: %s", fpsS = "Lower visual load", fpsC = "🚀 FPS Boost: %s",
-		afk = "Anti-AFK", afkS = "Prevent idle kick", afkOn = "✅ Anti-AFK on",
-		on = "ON", off = "OFF",
+		afk = "Anti-AFK", afkS = "Prevent idle kick", afkOn = "✅ Anti-AFK on", on = "ON", off = "OFF",
+		fbPh = "Type feedback for Discord...", fbSend = "📤 Send Feedback to Discord", fbSendS = "Includes user & PlaceId",
+		fbEmpty = "⚠️ Enter feedback text first", fbWait = "⏳ Wait %ds before sending again",
+		fbNoUrl = "⚠️ Webhook URL not set", fbNoReq = "❌ Executor lacks HTTP request",
+		fbSent = "✅ Feedback sent to Discord", fbFail = "❌ Failed to send feedback",
 		lng = "Language / Ngôn ngữ", lngS = "Current: English", lngChg = "🌐 English",
 		cam = "Auto Follow Camera: %s", camS = "Toggle panel following camera", camC = "📷 Auto Follow: %s",
 		dm = "3D Drag: %s", dmS = "Toggle dragging panel in 3D", dmC = "🖐️ 3D Drag: %s",
@@ -85,23 +86,33 @@ local Pal = {
 	{ r = Color3.fromRGB(255,240,247), rt = .08, s = Color3.new(1,1,1), h = Color3.fromRGB(252,224,236), m = Color3.fromRGB(64,24,42), b = Color3.fromRGB(125,68,94), l = Color3.fromRGB(255,250,252), d = Color3.fromRGB(185,62,116), lt = Color3.fromRGB(64,24,42), ls = Color3.fromRGB(142,86,112), a = Color3.fromRGB(224,82,142) },
 }
 
-local function tr(k, ...)
-	local v = T[lang][k]
-	return (type(v) == "string" and select("#", ...) > 0) and string.format(v, ...) or v
+-- UI Helpers
+local function mk(cls, props, par)
+	local o = Instance.new(cls)
+	for k, v in pairs(props or {}) do o[k] = v end
+	if par then o.Parent = par end
+	return o
 end
+local function cr(o, r) return mk("UICorner", { CornerRadius = UDim.new(0, r or 12) }, o) end
+local function sk(o, th, trp, col) return mk("UIStroke", { Thickness = th or 1.2, Transparency = trp or .3, Color = col or Color3.new(1,1,1) }, o) end
+local function ll(o, pad, dir) return mk("UIListLayout", { Padding = UDim.new(0, pad or 8), FillDirection = dir or Enum.FillDirection.Vertical }, o) end
+local function pd(o, l, r, t, b) return mk("UIPadding", { PaddingLeft = UDim.new(0,l or 0), PaddingRight = UDim.new(0,r or l or 0), PaddingTop = UDim.new(0,t or 0), PaddingBottom = UDim.new(0,b or t or 0) }, o) end
+
+local function tr(k, ...) local v = T[lang][k]; return (type(v) == "string" and select("#", ...) > 0) and string.format(v, ...) or v end
 local function pal() return Pal[themeIdx] end
-local function thmName() return tr("themes")[themeIdx] end
 local function st(on) return on and tr("on") or tr("off") end
 local function tiltZ() return (UIS.TouchEnabled and not UIS.KeyboardEnabled) and math.rad(-2.5) or math.rad(-1.2) end
 
-local Folder = Instance.new("Folder"); Folder.Name = TAG; Folder.Parent = workspace
-local Part = Instance.new("Part")
-Part.Size, Part.Material, Part.Transparency, Part.Anchored = Vector3.new(10.5, 6.2, .08), Enum.Material.Glass, 1, true
-Part.CanCollide, Part.CanQuery, Part.CanTouch, Part.CastShadow, Part.Parent = false, true, true, false, Folder
+local Folder = mk("Folder", { Name = TAG }, workspace)
+local Part = mk("Part", {
+	Size = Vector3.new(10.5, 6.2, .08), Material = Enum.Material.Glass, Transparency = 1,
+	Anchored = true, CanCollide = false, CanQuery = true, CanTouch = true, CastShadow = false
+}, Folder)
 
-local Gui = Instance.new("SurfaceGui")
-Gui.Name, Gui.Face, Gui.SizingMode, Gui.PixelsPerStud = TAG.."G", Enum.NormalId.Front, Enum.SurfaceGuiSizingMode.PixelsPerStud, 65
-Gui.AlwaysOnTop, Gui.LightInfluence, Gui.ClipsDescendants, Gui.Adornee, Gui.Parent = false, 0, true, Part, PGui
+local Gui = mk("SurfaceGui", {
+	Name = TAG.."G", Face = Enum.NormalId.Front, SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud,
+	PixelsPerStud = 65, AlwaysOnTop = false, LightInfluence = 0, ClipsDescendants = true, Adornee = Part
+}, PGui)
 
 local function targetCF()
 	local c = workspace.CurrentCamera and workspace.CurrentCamera.CFrame
@@ -110,20 +121,28 @@ local function targetCF()
 end
 local curCF = targetCF(); Part.CFrame = curCF
 
-local cards, secs, topBtns, segBtns, pages = {}, {}, {}, {}, {}
-local Root, Stroke, Header, TitleLbl, PinBtn, RetBtn, SegBar, Pill, PagesHolder, syncPill
-local HeroCard, HeroAccent, HeroTagLbl, HeroTitleLbl, HeroSubLbl, HeroStroke
+local syncPill, fbBox
+local mapCard = { thmS = function() return tr("thmS", tr("themes")[themeIdx]) end, dstS = function() return tr("dstS", tostring(dist)) end, cam = function() return tr("cam", st(followCam)) end, dm = function() return tr("dm", st(dragOn)) end, ncp = function() return tr("ncp", st(noclipOn)) end, fps = function() return tr("fps", st(fpsOn)) end, spd = function() return tr("spd", Moves[moveIdx].l) end }
+local function cardText(k) return mapCard[k] and mapCard[k]() or tr(k) end
 
-local function cardText(k)
-	if k == "thmS" then return tr(k, thmName()) end
-	if k == "dstS" then return tr(k, tostring(dist)) end
-	if k == "cam" then return tr(k, st(followCam)) end
-	if k == "dm" then return tr(k, st(dragOn)) end
-	if k == "ncp" then return tr(k, st(noclipOn)) end
-	if k == "fps" then return tr(k, st(fpsOn)) end
-	if k == "spd" then return tr(k, Moves[moveIdx].l) end
-	return tr(k)
-end
+local Root = mk("Frame", { Size = UDim2.fromScale(1,1), BorderSizePixel = 0 }, Gui); cr(Root, 22)
+local Stroke = sk(Root, 2, .25)
+local Header = mk("Frame", { Size = UDim2.new(1,-32,0,44), Position = UDim2.new(0,16,0,14), BackgroundTransparency = .15, BorderSizePixel = 0 }, Root); cr(Header, 999)
+local TitleLbl = mk("TextLabel", { Size = UDim2.new(0,220,1,0), Position = UDim2.new(0,14,0,0), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left }, Header)
+
+local SegBar = mk("Frame", { Size = UDim2.new(1,-36,0,34), Position = UDim2.new(0,18,0,63), BackgroundTransparency = .18, BorderSizePixel = 0 }, Root); cr(SegBar, 999); pd(SegBar, 3)
+local Pill = mk("Frame", { Size = UDim2.new(0,80,0,28), Position = UDim2.new(0,3,0,3), BorderSizePixel = 0, ZIndex = 2 }, SegBar); cr(Pill, 999)
+ll(SegBar, 4, Enum.FillDirection.Horizontal).VerticalAlignment = Enum.VerticalAlignment.Center
+
+statusLbl = mk("TextLabel", { Size = UDim2.new(1,-36,0,22), Position = UDim2.new(0,18,0,101), BackgroundTransparency = 1, Font = Enum.Font.GothamMedium, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left }, Root)
+local PagesHolder = mk("Frame", { Size = UDim2.new(1,-36,1,-134), Position = UDim2.new(0,18,0,126), BackgroundTransparency = 1, ClipsDescendants = true }, Root)
+
+local HeroCard = mk("Frame", { Size = UDim2.new(1,0,0,74), BorderSizePixel = 0, ClipsDescendants = true }); cr(HeroCard, 14)
+local HeroStroke = sk(HeroCard, 1.2, .35)
+local HeroAccent = mk("Frame", { Size = UDim2.new(0,4,1,-20), Position = UDim2.new(0,10,0,10), BorderSizePixel = 0 }, HeroCard); cr(HeroAccent, 999)
+local HeroTagLbl = mk("TextLabel", { Size = UDim2.new(1,-34,0,14), Position = UDim2.new(0,22,0,8), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 10, TextXAlignment = Enum.TextXAlignment.Left }, HeroCard)
+local HeroTitleLbl = mk("TextLabel", { Size = UDim2.new(1,-34,0,22), Position = UDim2.new(0,22,0,22), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 17, TextXAlignment = Enum.TextXAlignment.Left }, HeroCard)
+local HeroSubLbl = mk("TextLabel", { Size = UDim2.new(1,-34,0,18), Position = UDim2.new(0,22,0,46), BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, HeroCard)
 
 local function refreshUI()
 	pcall(function()
@@ -131,19 +150,12 @@ local function refreshUI()
 		TweenService:Create(Root, TweenInfo.new(.2), { BackgroundColor3 = p.r, BackgroundTransparency = p.rt }):Play()
 		TweenService:Create(Header, TweenInfo.new(.2), { BackgroundColor3 = p.h }):Play()
 		TweenService:Create(SegBar, TweenInfo.new(.2), { BackgroundColor3 = p.h }):Play()
-		Pill.BackgroundColor3 = p.a
-		Stroke.Color, TitleLbl.TextColor3, statusLbl.TextColor3 = p.s, p.m, p.b
-		TitleLbl.Text, RetBtn.Text = tr("hdr"), tr("ret")
-		if HeroCard then
-			HeroCard.BackgroundColor3 = p.d
-			HeroStroke.Color = p.a
-			if HeroAccent then HeroAccent.BackgroundColor3 = p.a end
-			HeroTagLbl.Text, HeroTagLbl.TextColor3 = tr("heroTag"), p.a
-			HeroTitleLbl.Text, HeroTitleLbl.TextColor3 = tr("hdr"), Color3.new(1, 1, 1)
-			HeroSubLbl.Text, HeroSubLbl.TextColor3 = tr("heroSub"), Color3.fromRGB(220, 228, 245)
-		end
-		PinBtn.Text = followCam and tr("pin") or tr("pinned")
-		RetBtn.BackgroundColor3, RetBtn.TextColor3 = p.d, Color3.new(1,1,1)
+		Pill.BackgroundColor3, Stroke.Color, TitleLbl.TextColor3, statusLbl.TextColor3 = p.a, p.s, p.m, p.b
+		TitleLbl.Text, HeroCard.BackgroundColor3, HeroStroke.Color, HeroAccent.BackgroundColor3 = tr("hdr"), p.d, p.a, p.a
+		HeroTagLbl.Text, HeroTagLbl.TextColor3 = tr("heroTag"), p.a
+		HeroTitleLbl.Text, HeroTitleLbl.TextColor3 = tr("hdr"), Color3.new(1,1,1)
+		HeroSubLbl.Text, HeroSubLbl.TextColor3 = tr("heroSub"), Color3.fromRGB(220,228,245)
+		if fbBox then fbBox.BackgroundColor3, fbBox.TextColor3, fbBox.PlaceholderText = p.l, p.lt, tr("fbPh") end
 		for _, b in ipairs(topBtns) do b.BackgroundColor3, b.TextColor3 = p.l, p.m end
 		for i, sb in ipairs(segBtns) do sb.b.Text, sb.b.TextColor3 = tr(sb.k), (i == curTab) and Color3.new(1,1,1) or p.m end
 		for _, s in ipairs(secs) do s.l.Text, s.l.TextColor3 = tr(s.k), p.m end
@@ -160,12 +172,11 @@ end
 
 local function restore()
 	pcall(function()
-		if not Folder.Parent then Folder = Instance.new("Folder"); Folder.Name = TAG; Folder.Parent = workspace end
+		if not Folder.Parent then Folder = mk("Folder", { Name = TAG }, workspace) end
 		if not Part.Parent then Part.Parent = Folder end
 		if not Gui.Parent then Gui.Parent = PGui end
 		Gui.Adornee, Gui.Enabled, hubOpen, followCam, isDrag = Part, true, true, true, false
-		curCF = targetCF(); Part.CFrame = curCF
-		refreshUI(); statusLbl.Text = tr("rst")
+		curCF = targetCF(); Part.CFrame = curCF; refreshUI(); statusLbl.Text = tr("rst")
 	end)
 end
 
@@ -179,6 +190,30 @@ local function runUrl(name, url)
 		local rOk, rErr = pcall(fn)
 		statusLbl.Text = rOk and tr("ok", name) or tr("err", tostring(rErr))
 		task.delay(.5, function() if hubOpen then restore() end end)
+	end)
+end
+
+local function sendFeedback()
+	local msg = fbBox and string.gsub(fbBox.Text, "^%s*(.-)%s*$", "%1") or ""
+	if #msg == 0 then statusLbl.Text = tr("fbEmpty"); return end
+	local now = os.clock()
+	if now - lastSend < COOLDOWN_SEC then statusLbl.Text = tr("fbWait", math.ceil(COOLDOWN_SEC - (now - lastSend))); return end
+	if not WEBHOOK_URL:match("^https://discord%.com/api/webhooks/") then statusLbl.Text = tr("fbNoUrl"); return end
+	local reqFn = (type(request) == "function" and request) or (type(http_request) == "function" and http_request) or (syn and type(syn.request) == "function" and syn.request)
+	if not reqFn then statusLbl.Text = tr("fbNoReq"); return end
+	lastSend = now
+	task.spawn(function()
+		local body = HttpService:JSONEncode({
+			username = "XStarX 3D v0.98",
+			content = string.format("**User:** %s (`%d`) | **PlaceId:** `%d`\n**Feedback:** %s", LP.Name, LP.UserId, game.PlaceId, string.sub(msg, 1, 1500))
+		})
+		local ok, res = pcall(reqFn, { Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = body })
+		if ok and res and (res.StatusCode == 200 or res.StatusCode == 204 or not res.StatusCode) then
+			if fbBox then fbBox.Text = "" end
+			statusLbl.Text = tr("fbSent")
+		else
+			statusLbl.Text = tr("fbFail")
+		end
 	end)
 end
 
@@ -197,89 +232,72 @@ local function applyFps()
 			if v:IsA("BasePart") then
 				v.CastShadow = false
 				if v.Material == Enum.Material.Glass or v.Material == Enum.Material.Neon then v.Material = Enum.Material.SmoothPlastic end
-			elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then
-				v.Enabled = false
-			end
+			elseif v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") then v.Enabled = false end
 		end
 	end)
 end
 
-local function corner(o, r) Instance.new("UICorner", o).CornerRadius = UDim.new(0, r or 12) end
-
-Root = Instance.new("Frame"); Root.Size, Root.BorderSizePixel, Root.Parent = UDim2.fromScale(1,1), 0, Gui; corner(Root, 22)
-Stroke = Instance.new("UIStroke"); Stroke.Thickness, Stroke.Transparency, Stroke.Parent = 2, .25, Root
-
-Header = Instance.new("Frame"); Header.Size, Header.Position, Header.BackgroundTransparency, Header.BorderSizePixel, Header.Parent = UDim2.new(1,-32,0,44), UDim2.new(0,16,0,14), .15, 0, Root; corner(Header, 999)
-TitleLbl = Instance.new("TextLabel"); TitleLbl.Size, TitleLbl.Position, TitleLbl.BackgroundTransparency, TitleLbl.Font, TitleLbl.TextSize, TitleLbl.TextXAlignment, TitleLbl.Parent = UDim2.new(0,220,1,0), UDim2.new(0,14,0,0), 1, Enum.Font.GothamBold, 14, Enum.TextXAlignment.Left, Header
-
 local function topBtn(x, w, fn)
-	local b = Instance.new("TextButton"); b.Size, b.Position, b.Font, b.TextSize, b.Parent = UDim2.new(0,w,0,30), UDim2.new(1,x,.5,-15), Enum.Font.GothamBold, 12, Header
-	corner(b, 999); b.MouseButton1Click:Connect(fn); table.insert(topBtns, b); return b
+	local b = mk("TextButton", { Size = UDim2.new(0,w,0,30), Position = UDim2.new(1,x,.5,-15), Font = Enum.Font.GothamBold, TextSize = 12 }, Header)
+	cr(b, 999); b.MouseButton1Click:Connect(fn); table.insert(topBtns, b); return b
 end
 
 local function switchTab(idx, instant)
 	pcall(function()
 		if idx == curTab and not instant then return end
-		local dir = (idx >= curTab) and 1 or -1
-		curTab = idx
+		local dir = (idx >= curTab) and 1 or -1; curTab = idx
 		for i, sb in ipairs(segBtns) do sb.b.TextColor3 = (i == idx) and Color3.new(1,1,1) or pal().m end
 		if syncPill then syncPill(instant) end
 		for i, pg in ipairs(pages) do
 			if i == idx then
 				pg.Visible = true
-				if instant then pg.Position = UDim2.fromScale(0, 0)
-				else
-					pg.Position = UDim2.fromScale(dir * .22, 0)
-					TweenService:Create(pg, TweenInfo.new(.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = UDim2.fromScale(0, 0) }):Play()
-				end
+				if instant then pg.Position = UDim2.fromScale(0,0)
+				else pg.Position = UDim2.fromScale(dir*.22,0); TweenService:Create(pg, TweenInfo.new(.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = UDim2.fromScale(0,0) }):Play() end
 			elseif pg.Visible then
 				local old = pg
-				if instant then old.Visible = false; old.Position = UDim2.fromScale(0, 0)
+				if instant then old.Visible = false; old.Position = UDim2.fromScale(0,0)
 				else
-					local tw = TweenService:Create(old, TweenInfo.new(.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = UDim2.fromScale(-dir * .22, 0) })
-					tw:Play()
-					tw.Completed:Once(function() if curTab ~= i then old.Visible = false; old.Position = UDim2.fromScale(0, 0) end end)
+					local tw = TweenService:Create(old, TweenInfo.new(.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = UDim2.fromScale(-dir*.22,0) })
+					tw:Play(); tw.Completed:Once(function() if curTab ~= i then old.Visible = false; old.Position = UDim2.fromScale(0,0) end end)
 				end
 			end
 		end
 	end)
 end
 
-PinBtn = topBtn(-164, 116, function() followCam = not followCam; if not followCam then pinnedCF = Part.CFrame end; refreshUI() end)
+local PinBtn = topBtn(-164, 116, function() followCam = not followCam; if not followCam then pinnedCF = Part.CFrame end; PinBtn.Text = followCam and tr("pin") or tr("pinned") end)
 topBtn(-38, 30, function() hubOpen, Gui.Enabled = false, false end).Text = "✕"
 
-SegBar = Instance.new("Frame"); SegBar.Size, SegBar.Position, SegBar.BackgroundTransparency, SegBar.BorderSizePixel, SegBar.Parent = UDim2.new(1,-36,0,34), UDim2.new(0,18,0,63), .18, 0, Root; corner(SegBar, 999)
-Pill = Instance.new("Frame"); Pill.Size, Pill.Position, Pill.BorderSizePixel, Pill.ZIndex, Pill.Parent = UDim2.new(0,80,0,28), UDim2.new(0,3,0,3), 0, 2, SegBar; corner(Pill, 999)
-
-local segL = Instance.new("UIListLayout"); segL.FillDirection, segL.HorizontalAlignment, segL.VerticalAlignment, segL.Padding, segL.Parent = Enum.FillDirection.Horizontal, Enum.HorizontalAlignment.Left, Enum.VerticalAlignment.Center, UDim.new(0,4), SegBar
-local segP = Instance.new("UIPadding"); segP.PaddingLeft, segP.PaddingRight, segP.Parent = UDim.new(0,3), UDim.new(0,3), SegBar
-
-local function addSeg(i, key)
-	local b = Instance.new("TextButton"); b.Size, b.BackgroundTransparency, b.Font, b.TextSize, b.ZIndex, b.AutoButtonColor, b.Parent = UDim2.new(0,104,0,28), 1, Enum.Font.GothamBold, 11, 3, false, SegBar
-	corner(b, 999); table.insert(segBtns, { b = b, k = key })
-	b.MouseButton1Click:Connect(function() switchTab(i, false) end)
+for i, k in ipairs({ "home", "fun", "set" }) do
+	local b = mk("TextButton", { Size = UDim2.new(0,104,0,28), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 11, ZIndex = 3, AutoButtonColor = false }, SegBar)
+	cr(b, 999); table.insert(segBtns, { b = b, k = k }); b.MouseButton1Click:Connect(function() switchTab(i, false) end)
 end
-addSeg(1, "home"); addSeg(2, "fun"); addSeg(3, "set")
 
 syncPill = function(instant)
 	pcall(function()
-		local sb = segBtns[curTab] and segBtns[curTab].b
-		if not sb then return end
-		local gp = UDim2.new(0, sb.AbsolutePosition.X - SegBar.AbsolutePosition.X, 0.5, -14)
-		local gs = UDim2.new(0, sb.AbsoluteSize.X, 0, 28)
+		local sb = segBtns[curTab] and segBtns[curTab].b; if not sb then return end
+		local gp, gs = UDim2.new(0, sb.AbsolutePosition.X - SegBar.AbsolutePosition.X, .5, -14), UDim2.new(0, sb.AbsoluteSize.X, 0, 28)
 		if instant then Pill.Position, Pill.Size = gp, gs
 		else TweenService:Create(Pill, TweenInfo.new(.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = gp, Size = gs }):Play() end
 	end)
 end
 
-statusLbl = Instance.new("TextLabel"); statusLbl.Size, statusLbl.Position, statusLbl.BackgroundTransparency, statusLbl.Font, statusLbl.TextSize, statusLbl.TextXAlignment, statusLbl.Parent = UDim2.new(1,-36,0,22), UDim2.new(0,18,0,101), 1, Enum.Font.GothamMedium, 12, Enum.TextXAlignment.Left, Root
-PagesHolder = Instance.new("Frame"); PagesHolder.Size, PagesHolder.Position, PagesHolder.BackgroundTransparency, PagesHolder.ClipsDescendants, PagesHolder.Parent = UDim2.new(1,-36,1,-134), UDim2.new(0,18,0,126), 1, true, Root
+local function mkPage(vis, cs)
+	local f = mk(cs and "ScrollingFrame" or "Frame", { Size = UDim2.fromScale(1,1), Position = UDim2.fromScale(0,0), BackgroundTransparency = 1, Visible = vis }, PagesHolder)
+	if cs then f.ScrollBarThickness, f.CanvasSize = 4, UDim2.new(0,0,0,cs) end
+	ll(f, 8); table.insert(pages, f); return f
+end
 
-local function card(par, tk, sk, dk, fn)
-	local b = Instance.new("TextButton"); b.Size, b.AutoButtonColor, b.Text, b.Parent = UDim2.new(1,0,0,46), false, "", par; corner(b, 12)
-	local t = Instance.new("TextLabel"); t.Size, t.Position, t.BackgroundTransparency, t.Font, t.TextSize, t.TextXAlignment, t.Parent = UDim2.new(1,-20,0,19), UDim2.new(0,12,0,5), 1, Enum.Font.GothamBold, 13, Enum.TextXAlignment.Left, b
-	local s = Instance.new("TextLabel"); s.Size, s.Position, s.BackgroundTransparency, s.Font, s.TextSize, s.TextXAlignment, s.Parent = UDim2.new(1,-20,0,15), UDim2.new(0,12,0,25), 1, Enum.Font.Gotham, 11, Enum.TextXAlignment.Left, b
-	table.insert(cards, { b=b, t=t, s=s, tk=tk, sk=sk, dk=dk })
+local function mkSec(par, k)
+	local l = mk("TextLabel", { Size = UDim2.new(1,0,0,20), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left }, par)
+	table.insert(secs, { l = l, k = k }); return l
+end
+
+local function mkCard(par, tk, sk, dk, fn)
+	local b = mk("TextButton", { Size = UDim2.new(1,0,0,46), AutoButtonColor = false, Text = "" }, par); cr(b, 12)
+	local t = mk("TextLabel", { Size = UDim2.new(1,-20,0,19), Position = UDim2.new(0,12,0,5), BackgroundTransparency = 1, Font = Enum.Font.GothamBold, TextSize = 13, TextXAlignment = Enum.TextXAlignment.Left }, b)
+	local s = mk("TextLabel", { Size = UDim2.new(1,-20,0,15), Position = UDim2.new(0,12,0,25), BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, b)
+	table.insert(cards, { b = b, t = t, s = s, tk = tk, sk = sk, dk = dk })
 	b.MouseButton1Click:Connect(function()
 		TweenService:Create(b, TweenInfo.new(.1), { BackgroundColor3 = pal().a }):Play()
 		task.delay(.15, function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = dk and pal().d or pal().l }):Play() end)
@@ -287,68 +305,43 @@ local function card(par, tk, sk, dk, fn)
 	end)
 end
 
-local function page(vis, scroll, cs)
-	local f = Instance.new(scroll and "ScrollingFrame" or "Frame")
-	f.Size, f.Position, f.BackgroundTransparency, f.Visible, f.Parent = UDim2.fromScale(1,1), UDim2.fromScale(0,0), 1, vis, PagesHolder
-	if scroll then f.ScrollBarThickness, f.CanvasSize = 4, UDim2.new(0,0,0,cs or 460) end
-	Instance.new("UIListLayout", f).Padding = UDim.new(0,8)
-	table.insert(pages, f); return f
-end
-
-local function sec(par, k)
-	local l = Instance.new("TextLabel"); l.Size, l.BackgroundTransparency, l.Font, l.TextSize, l.TextXAlignment, l.Parent = UDim2.new(1,0,0,20), 1, Enum.Font.GothamBold, 12, Enum.TextXAlignment.Left, par
-	table.insert(secs, { l=l, k=k })
-end
-
--- HOME: các tiện ích còn lại + lối tắt sang Fun & Settings
-local pHome = page(true, true, 460)
-HeroCard = Instance.new("Frame"); HeroCard.Size, HeroCard.BorderSizePixel, HeroCard.ClipsDescendants, HeroCard.Parent = UDim2.new(1, 0, 0, 74), 0, true, pHome; corner(HeroCard, 14)
-HeroStroke = Instance.new("UIStroke"); HeroStroke.Thickness, HeroStroke.Transparency, HeroStroke.Parent = 1.2, .35, HeroCard
-HeroAccent = Instance.new("Frame"); HeroAccent.Size, HeroAccent.Position, HeroAccent.BorderSizePixel, HeroAccent.Parent = UDim2.new(0, 4, 1, -20), UDim2.new(0, 10, 0, 10), 0, HeroCard; corner(HeroAccent, 999)
-HeroTagLbl = Instance.new("TextLabel"); HeroTagLbl.Size, HeroTagLbl.Position, HeroTagLbl.BackgroundTransparency, HeroTagLbl.Font, HeroTagLbl.TextSize, HeroTagLbl.TextXAlignment, HeroTagLbl.Parent = UDim2.new(1, -34, 0, 14), UDim2.new(0, 22, 0, 8), 1, Enum.Font.GothamBold, 10, Enum.TextXAlignment.Left, HeroCard
-HeroTitleLbl = Instance.new("TextLabel"); HeroTitleLbl.Size, HeroTitleLbl.Position, HeroTitleLbl.BackgroundTransparency, HeroTitleLbl.Font, HeroTitleLbl.TextSize, HeroTitleLbl.TextXAlignment, HeroTitleLbl.Parent = UDim2.new(1, -34, 0, 22), UDim2.new(0, 22, 0, 22), 1, Enum.Font.GothamBold, 17, Enum.TextXAlignment.Left, HeroCard
-HeroSubLbl = Instance.new("TextLabel"); HeroSubLbl.Size, HeroSubLbl.Position, HeroSubLbl.BackgroundTransparency, HeroSubLbl.Font, HeroSubLbl.TextSize, HeroSubLbl.TextXAlignment, HeroSubLbl.Parent = UDim2.new(1, -34, 0, 18), UDim2.new(0, 22, 0, 46), 1, Enum.Font.Gotham, 11, Enum.TextXAlignment.Left, HeroCard
-
-sec(pHome, "sUt")
-card(pHome, "ncp", "ncpS", true, function() noclipOn = not noclipOn; refreshUI(); statusLbl.Text = tr("ncpC", st(noclipOn)) end)
-card(pHome, "spd", "spdS", false, function() moveIdx = (moveIdx % #Moves) + 1; applyMove(); refreshUI(); statusLbl.Text = tr("spdC", Moves[moveIdx].l) end)
-card(pHome, "fps", "fpsS", false, function() fpsOn = not fpsOn; if fpsOn then applyFps() end; refreshUI(); statusLbl.Text = tr("fpsC", st(fpsOn)) end)
-card(pHome, "afk", "afkS", false, function()
-	if not afkOn then
-		afkOn = true
-		track(LP.Idled:Connect(function() pcall(function() VU:CaptureController(); VU:ClickButton2(Vector2.new()) end) end))
-	end
+-- HOME: tiện ích còn lại + lối tắt
+local pHome = mkPage(true, 460); HeroCard.Parent = pHome; mkSec(pHome, "sUt")
+mkCard(pHome, "ncp", "ncpS", true, function() noclipOn = not noclipOn; refreshUI(); statusLbl.Text = tr("ncpC", st(noclipOn)) end)
+mkCard(pHome, "spd", "spdS", false, function() moveIdx = (moveIdx % #Moves) + 1; applyMove(); refreshUI(); statusLbl.Text = tr("spdC", Moves[moveIdx].l) end)
+mkCard(pHome, "fps", "fpsS", false, function() fpsOn = not fpsOn; if fpsOn then applyFps() end; refreshUI(); statusLbl.Text = tr("fpsC", st(fpsOn)) end)
+mkCard(pHome, "afk", "afkS", false, function()
+	if not afkOn then afkOn = true; track(LP.Idled:Connect(function() pcall(function() VU:CaptureController(); VU:ClickButton2(Vector2.new()) end) end)) end
 	statusLbl.Text = tr("afkOn")
 end)
-card(pHome, "hFun", "hFunS", false, function() switchTab(2, false) end)
-card(pHome, "hSet", "hSetS", false, function() switchTab(3, false) end)
+mkCard(pHome, "hFun", "hFunS", false, function() switchTab(2, false) end)
+mkCard(pHome, "hSet", "hSetS", false, function() switchTab(3, false) end)
 
 -- FUN: chỉ có Avatar Copier, Bundles FE & Emotes/Anim
-local pFun = page(false, false)
-sec(pFun, "sFun")
-card(pFun, "av", "avS", true, function() runUrl("Avatar Copier", "https://api.lyraez.lol/loader") end)
-card(pFun, "bd", "bdS", false, function() runUrl("Bundles FE", "https://api.luarmor.net/files/v4/loaders/2b1a1e4dd23e3419902187e162baf26f.lua") end)
-card(pFun, "em", "emS", false, function() runUrl("Emotes & Anim", "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua") end)
+local pFun = mkPage(false); mkSec(pFun, "sFun")
+mkCard(pFun, "av", "avS", true, function() runUrl("Avatar Copier", "https://api.lyraez.lol/loader") end)
+mkCard(pFun, "bd", "bdS", false, function() runUrl("Bundles FE", "https://api.luarmor.net/files/v4/loaders/2b1a1e4dd23e3419902187e162baf26f.lua") end)
+mkCard(pFun, "em", "emS", false, function() runUrl("Emotes & Anim", "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua") end)
 
--- SETTINGS
-local pSet = page(false, true, 520)
-card(pSet, "lng", "lngS", true, function() lang = (lang == "vi") and "en" or "vi"; refreshUI(); statusLbl.Text = tr("lngChg") end)
-card(pSet, "thm", "thmS", false, function() themeIdx = (themeIdx % #Pal) + 1; refreshUI(); statusLbl.Text = tr("thmChg", thmName()) end)
-card(pSet, "cam", "camS", false, function() followCam = not followCam; if not followCam then pinnedCF = Part.CFrame end; refreshUI(); statusLbl.Text = tr("camC", st(followCam)) end)
-card(pSet, "dm", "dmS", false, function() dragOn = not dragOn; if not dragOn then isDrag = false end; refreshUI(); statusLbl.Text = tr("dmC", st(dragOn)) end)
-card(pSet, "dst", "dstS", false, function() dist = (dist < 8) and 8.5 or ((dist < 10) and 11 or 7); dragDist = dist; refreshUI(); statusLbl.Text = tr("dstChg", tostring(dist)) end)
-card(pSet, "nr", "dstS", false, function() dist = math.clamp(dist - 1, 5, 16); dragDist = dist; refreshUI(); statusLbl.Text = tr("adjC", dist) end)
-card(pSet, "fr", "dstS", false, function() dist = math.clamp(dist + 1, 5, 16); dragDist = dist; refreshUI(); statusLbl.Text = tr("adjC", dist) end)
-card(pSet, "rstB", "rstBS", false, restore)
+-- SETTINGS + GÓP Ý DISCORD
+local pSet = mkPage(false, 640)
+local function setDist(v) dist = v; dragDist = v; refreshUI(); statusLbl.Text = tr("adjC", dist) end
+mkCard(pSet, "lng", "lngS", true, function() lang = (lang == "vi") and "en" or "vi"; refreshUI(); statusLbl.Text = tr("lngChg") end)
+mkCard(pSet, "thm", "thmS", false, function() themeIdx = (themeIdx % #Pal) + 1; refreshUI(); statusLbl.Text = tr("thmChg", tr("themes")[themeIdx]) end)
+mkCard(pSet, "cam", "camS", false, function() followCam = not followCam; if not followCam then pinnedCF = Part.CFrame end; refreshUI(); statusLbl.Text = tr("camC", st(followCam)) end)
+mkCard(pSet, "dm", "dmS", false, function() dragOn = not dragOn; if not dragOn then isDrag = false end; refreshUI(); statusLbl.Text = tr("dmC", st(dragOn)) end)
+mkCard(pSet, "dst", "dstS", false, function() setDist((dist < 8) and 8.5 or ((dist < 10) and 11 or 7)); statusLbl.Text = tr("dstChg", tostring(dist)) end)
+mkCard(pSet, "nr", "dstS", false, function() setDist(math.clamp(dist - 1, 5, 16)) end)
+mkCard(pSet, "fr", "dstS", false, function() setDist(math.clamp(dist + 1, 5, 16)) end)
+mkCard(pSet, "rstB", "rstBS", false, restore)
 
-local function rayPt(pos, d)
-	local c = workspace.CurrentCamera; if not c then return Part.Position end
-	local r = c:ViewportPointToRay(pos.X, pos.Y); return r.Origin + r.Direction * d
-end
+mkSec(pSet, "sFb")
+fbBox = mk("TextBox", { Size = UDim2.new(1,0,0,40), ClearTextOnFocus = false, Font = Enum.Font.Gotham, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, Text = "" }, pSet)
+cr(fbBox, 12); pd(fbBox, 12)
+mkCard(pSet, "fbSend", "fbSendS", true, sendFeedback)
 
 local rayParams = RaycastParams.new()
-rayParams.FilterType = Enum.RaycastFilterType.Include
-rayParams.FilterDescendantsInstances = { Part }
+rayParams.FilterType, rayParams.FilterDescendantsInstances = Enum.RaycastFilterType.Include, { Part }
 
 track(UIS.InputBegan:Connect(function(inp, gp)
 	if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
@@ -370,7 +363,8 @@ end))
 track(UIS.InputChanged:Connect(function(inp)
 	if isDrag and dragOn and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
 		local c = workspace.CurrentCamera; if not c then return end
-		local cf = CFrame.lookAt(rayPt(inp.Position, dragDist) + dragOff, c.CFrame.Position, c.CFrame.UpVector) * CFrame.Angles(0, 0, tiltZ())
+		local r = c:ViewportPointToRay(inp.Position.X, inp.Position.Y)
+		local cf = CFrame.lookAt(r.Origin + r.Direction * dragDist + dragOff, c.CFrame.Position, c.CFrame.UpVector) * CFrame.Angles(0, 0, tiltZ())
 		pinnedCF, curCF, Part.CFrame = cf, cf, cf
 	end
 end))
@@ -381,14 +375,14 @@ track(UIS.InputEnded:Connect(function(inp)
 	end
 end))
 
-local RGui = Instance.new("ScreenGui"); RGui.Name, RGui.ResetOnSpawn, RGui.Parent = TAG.."R", false, PGui
-RetBtn = Instance.new("TextButton"); RetBtn.Size, RetBtn.Position, RetBtn.BackgroundTransparency, RetBtn.Font, RetBtn.TextSize, RetBtn.Parent = UDim2.new(0,96,0,32), UDim2.new(0,14,.5,-16), .2, Enum.Font.GothamBold, 12, RGui
-corner(RetBtn, 999); RetBtn.MouseButton1Click:Connect(restore)
+local RGui = mk("ScreenGui", { Name = TAG.."R", ResetOnSpawn = false }, PGui)
+local RetBtn = mk("TextButton", { Size = UDim2.new(0,96,0,32), Position = UDim2.new(0,14,.5,-16), BackgroundTransparency = .2, Font = Enum.Font.GothamBold, TextSize = 12 }, RGui)
+cr(RetBtn, 999); RetBtn.MouseButton1Click:Connect(restore)
 
 track(LP.CharacterAdded:Connect(function() task.wait(.4); applyMove(); if fpsOn then applyFps() end end))
 
-refreshUI()
-statusLbl.Text = tr("rdy")
+refreshUI(); PinBtn.Text = followCam and tr("pin") or tr("pinned"); RetBtn.Text = tr("ret"); statusLbl.Text = tr("rdy")
+
 track(RunService.RenderStepped:Connect(function(dt)
 	if noclipOn and LP.Character then
 		for _, v in ipairs(LP.Character:GetDescendants()) do
