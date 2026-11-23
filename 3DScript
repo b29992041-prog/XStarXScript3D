@@ -7,18 +7,28 @@ local LP = Players.LocalPlayer
 local PGui = LP:WaitForChild("PlayerGui")
 local TAG = "XStarX3D"
 
-for _, o in ipairs({ workspace:FindFirstChild(TAG), PGui:FindFirstChild(TAG.."G"), PGui:FindFirstChild(TAG.."R") }) do
+for _, o in ipairs({
+	workspace:FindFirstChild(TAG),
+	workspace:FindFirstChild("XStarXCamPart"),
+	PGui:FindFirstChild(TAG .. "G"),
+	PGui:FindFirstChild(TAG .. "R"),
+	PGui:FindFirstChild("XStarXFreecamUI"),
+}) do
 	if o then pcall(function() o:Destroy() end) end
 end
 
 local lang, themeIdx, followCam, dragOn, hubOpen, dist, isDrag, curTab = "en", 1, true, true, true, 8.5, false, 1
 local pinnedCF, dragOff, dragDist, statusLbl = nil, Vector3.zero, 8.5, nil
 local joyActive, joyVec, joyTouch = false, Vector2.zero, nil
-local fcStarted, fcGui, fcPart, fcToggle, fcSpeed = false, nil, nil, nil, 1.0
-local origMinZ, origMaxZ = LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance
-local conns, secs, topBtns, segBtns, pages, cards = {}, {}, {}, {}, {}, {}
 
-local function track(c) table.insert(conns, c); return c end
+-- Freecam state (dùng chung 1 RenderStepped)
+local fcActive, fcEnabled, fcSpeed = false, false, 1.0
+local fcPart, fcPos, fcGui, fcJoyWrap, fcOuter, fcInner, fcToggleBtn = nil, nil, nil, nil, nil, nil, nil
+local fcJoyAct, fcJoyTouch, fcDir, fcLvl = false, nil, Vector3.zero, 0
+local origMinZ, origMaxZ = LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance
+
+local secs, topBtns, segBtns, pages, cards = {}, {}, {}, {}, {}
+local twFast = TweenInfo.new(0.16, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 
 local T = {
 	vi = {
@@ -77,7 +87,7 @@ local Part = mk("Part", {
 }, Folder)
 
 local Gui = mk("SurfaceGui", {
-	Name = TAG.."G", Face = Enum.NormalId.Front, SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud,
+	Name = TAG .. "G", Face = Enum.NormalId.Front, SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud,
 	PixelsPerStud = 65, AlwaysOnTop = false, LightInfluence = 0, ClipsDescendants = true, Adornee = Part
 }, PGui)
 
@@ -86,7 +96,8 @@ local function targetCF()
 	if not c then return Part.CFrame end
 	return CFrame.lookAt(c.Position + c.LookVector * dist + Vector3.new(0, .15, 0), c.Position, c.UpVector) * CFrame.Angles(0, 0, tiltZ())
 end
-local curCF = targetCF(); Part.CFrame = curCF
+local curCF = targetCF()
+Part.CFrame = curCF
 
 local syncPill
 local Root = mk("Frame", { Size = UDim2.fromScale(1,1), BorderSizePixel = 0 }, Gui); cr(Root, 22)
@@ -109,7 +120,7 @@ local HeroTitleLbl = mk("TextLabel", { Size = UDim2.new(1,-34,0,22), Position = 
 local HeroSubLbl = mk("TextLabel", { Size = UDim2.new(1,-34,0,18), Position = UDim2.new(0,22,0,46), BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, HeroCard)
 
 -- Nút gọi 3D + Joystick (bên phải để tránh che nút di chuyển trái dưới)
-local RGui = mk("ScreenGui", { Name = TAG.."R", ResetOnSpawn = false }, PGui)
+local RGui = mk("ScreenGui", { Name = TAG .. "R", ResetOnSpawn = false }, PGui)
 local RetBtn = mk("TextButton", { Size = UDim2.new(0,88,0,30), Position = UDim2.new(1,-102,0.56,0), BackgroundTransparency = .2, Font = Enum.Font.GothamBold, TextSize = 12 }, RGui)
 cr(RetBtn, 999)
 
@@ -130,9 +141,9 @@ cr(inner, 999)
 local function refreshUI()
 	pcall(function()
 		local p = pal()
-		TweenService:Create(Root, TweenInfo.new(.2), { BackgroundColor3 = p.r, BackgroundTransparency = p.rt }):Play()
-		TweenService:Create(Header, TweenInfo.new(.2), { BackgroundColor3 = p.h }):Play()
-		TweenService:Create(SegBar, TweenInfo.new(.2), { BackgroundColor3 = p.h }):Play()
+		TweenService:Create(Root, twFast, { BackgroundColor3 = p.r, BackgroundTransparency = p.rt }):Play()
+		TweenService:Create(Header, twFast, { BackgroundColor3 = p.h }):Play()
+		TweenService:Create(SegBar, twFast, { BackgroundColor3 = p.h }):Play()
 		Pill.BackgroundColor3, Stroke.Color, TitleLbl.TextColor3, statusLbl.TextColor3 = p.a, p.s, p.m, p.b
 		TitleLbl.Text, RetBtn.Text = tr("hdr"), tr("ret")
 		RetBtn.BackgroundColor3, RetBtn.TextColor3 = p.d, Color3.new(1,1,1)
@@ -181,7 +192,7 @@ local function resetJoy()
 	if pinnedCF then curCF = pinnedCF end
 end
 
-track(outer.InputBegan:Connect(function(inp)
+outer.InputBegan:Connect(function(inp)
 	if inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseButton1 then
 		if not hubOpen or not Gui.Enabled then restore() end
 		joyActive, joyTouch, followCam = true, inp, false
@@ -189,32 +200,58 @@ track(outer.InputBegan:Connect(function(inp)
 		updateJoy(inp.Position)
 		statusLbl.Text = tr("drg")
 	end
-end))
+end)
 
-track(UIS.InputChanged:Connect(function(inp)
-	if joyActive and inp == joyTouch then updateJoy(inp.Position) end
-end))
+local function setFreecamState(state)
+	fcEnabled = state
+	local c = workspace.CurrentCamera
+	if fcEnabled and fcPart then
+		fcPos = c.CFrame.Position
+		fcPart.CFrame = c.CFrame
+		c.CameraSubject = fcPart
+		c.CameraType = Enum.CameraType.Custom
+		LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance = 0, 0
+		if fcToggleBtn then fcToggleBtn.Text, fcToggleBtn.BackgroundColor3 = "FREECAM: ON", Color3.fromRGB(0,136,255) end
+		if fcJoyWrap then fcJoyWrap.Visible = true end
+	else
+		c.CameraSubject = LP.Character and LP.Character:FindFirstChild("Humanoid") or nil
+		LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance = origMinZ, origMaxZ
+		if fcToggleBtn then fcToggleBtn.Text, fcToggleBtn.BackgroundColor3 = "FREECAM: OFF", Color3.fromRGB(60,60,70) end
+		if fcJoyWrap then fcJoyWrap.Visible = false end
+	end
+end
 
-track(UIS.InputEnded:Connect(function(inp)
-	if joyActive and inp == joyTouch then resetJoy(); statusLbl.Text = tr("pnd") end
-end))
+local function updFcJoy(pos)
+	if not fcOuter or not fcInner then return end
+	local ctr = fcOuter.AbsolutePosition + fcOuter.AbsoluteSize * 0.5
+	local rad = fcOuter.AbsoluteSize.X * 0.5
+	local d = pos - ctr
+	local mag = math.min(d.Magnitude, rad)
+	local off = d.Magnitude > 0 and d.Unit * mag or Vector2.zero
+	local inW = fcInner.AbsoluteSize.X
+	fcInner.Position = UDim2.new(0.5, off.X - inW/2, 0.5, off.Y - inW/2)
+	fcLvl = math.floor((mag / rad) * 100)
+	fcDir = Vector3.new(off.X / rad, 0, off.Y / rad)
+end
 
--- Freecam + Joystick (nhập tốc độ không giới hạn kể cả số thập phân)
 local function openFreecam()
-	if fcStarted and fcGui then fcGui.Enabled = true; statusLbl.Text = tr("ok", "Freecam"); return end
-	fcStarted = true
+	if fcActive and fcGui then
+		fcGui.Enabled = true
+		setFreecamState(true)
+		statusLbl.Text = tr("ok", "Freecam")
+		return
+	end
+	fcActive = true
 	local cam = workspace.CurrentCamera
 	fcPart = mk("Part", { Size = Vector3.zero, Anchored = true, Transparency = 1, CanCollide = false, CFrame = cam.CFrame, Name = "XStarXCamPart" }, workspace)
-	local curPos = fcPart.Position
-	fcToggle = true
-	local fcJoyAct, fcJoyTouch, fcDir, fcLvl = false, nil, Vector3.zero, 0
+	fcPos = fcPart.Position
 
 	fcGui = mk("ScreenGui", { Name = "XStarXFreecamUI", ResetOnSpawn = false }, PGui)
 	local panel = mk("Frame", { Size = UDim2.fromOffset(200, 140), Position = UDim2.fromOffset(40, 40), BackgroundColor3 = Color3.fromRGB(18,18,22), BackgroundTransparency = 0.15, Active = true, Draggable = true }, fcGui)
 	cr(panel, 12); sk(panel, 1.5, 0, Color3.fromRGB(45,45,55))
 	mk("TextLabel", { Size = UDim2.new(1,-20,0,22), Position = UDim2.fromOffset(10,6), BackgroundTransparency = 1, TextColor3 = Color3.fromRGB(150,150,170), Font = Enum.Font.GothamBold, TextSize = 11, Text = "FREECAM CONTROL", TextXAlignment = Enum.TextXAlignment.Left }, panel)
 
-	local tBtn = mk("TextButton", { Size = UDim2.new(1,-20,0,30), Position = UDim2.fromOffset(10,32), BackgroundColor3 = Color3.fromRGB(0,136,255), TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 12, Text = "FREECAM: ON" }, panel); cr(tBtn, 8)
+	fcToggleBtn = mk("TextButton", { Size = UDim2.new(1,-20,0,30), Position = UDim2.fromOffset(10,32), BackgroundColor3 = Color3.fromRGB(0,136,255), TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 12, Text = "FREECAM: ON" }, panel); cr(fcToggleBtn, 8)
 	local tpBtn = mk("TextButton", { Size = UDim2.new(1,-20,0,28), Position = UDim2.fromOffset(10,68), BackgroundColor3 = Color3.fromRGB(45,45,55), TextColor3 = Color3.fromRGB(220,220,240), Font = Enum.Font.GothamBold, TextSize = 11, Text = "TELEPORT TO CAM" }, panel); cr(tpBtn, 8)
 
 	local spRow = mk("Frame", { Size = UDim2.new(1,-20,0,26), Position = UDim2.fromOffset(10,102), BackgroundTransparency = 1 }, panel)
@@ -222,24 +259,11 @@ local function openFreecam()
 	local spBox = mk("TextBox", { Size = UDim2.fromScale(0.55,1), Position = UDim2.fromScale(0.45,0), BackgroundColor3 = Color3.fromRGB(35,35,45), TextColor3 = Color3.new(1,1,1), Font = Enum.Font.GothamBold, TextSize = 12, Text = tostring(fcSpeed), ClearTextOnFocus = false }, spRow)
 	cr(spBox, 6); sk(spBox, 1, 0, Color3.fromRGB(60,60,75))
 
-	local fcJoyWrap = mk("Frame", { Size = UDim2.fromScale(1,1), BackgroundTransparency = 1 }, fcGui)
+	fcJoyWrap = mk("Frame", { Size = UDim2.fromScale(1,1), BackgroundTransparency = 1 }, fcGui)
 	local fOutSize, fInSize = 110, 45
-	local fOut = mk("Frame", { Size = UDim2.fromOffset(fOutSize,fOutSize), Position = UDim2.new(0.15,0,0.75,0), AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = Color3.fromRGB(15,15,20), BackgroundTransparency = 0.4, ZIndex = 1, Active = true }, fcJoyWrap)
-	cr(fOut, 999); sk(fOut, 1.5, 0.5, Color3.fromRGB(100,100,120))
-	local fIn = mk("Frame", { Size = UDim2.fromOffset(fInSize,fInSize), Position = UDim2.new(0.5,-fInSize/2,0.5,-fInSize/2), BackgroundColor3 = Color3.fromRGB(240,240,255), BackgroundTransparency = 0.1, ZIndex = 2 }, fOut); cr(fIn, 999)
-
-	local function syncFc()
-		local c = workspace.CurrentCamera
-		if fcToggle then
-			c.CameraSubject = fcPart; c.CameraType = Enum.CameraType.Custom
-			LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance = 0, 0
-			tBtn.Text, tBtn.BackgroundColor3, fcJoyWrap.Visible = "FREECAM: ON", Color3.fromRGB(0,136,255), true
-		else
-			c.CameraSubject = LP.Character and LP.Character:FindFirstChild("Humanoid") or nil
-			LP.CameraMinZoomDistance, LP.CameraMaxZoomDistance = origMinZ, origMaxZ
-			tBtn.Text, tBtn.BackgroundColor3, fcJoyWrap.Visible = "FREECAM: OFF", Color3.fromRGB(60,60,70), false
-		end
-	end
+	fcOuter = mk("Frame", { Size = UDim2.fromOffset(fOutSize,fOutSize), Position = UDim2.new(0.15,0,0.75,0), AnchorPoint = Vector2.new(0.5,0.5), BackgroundColor3 = Color3.fromRGB(15,15,20), BackgroundTransparency = 0.4, ZIndex = 1, Active = true }, fcJoyWrap)
+	cr(fcOuter, 999); sk(fcOuter, 1.5, 0.5, Color3.fromRGB(100,100,120))
+	fcInner = mk("Frame", { Size = UDim2.fromOffset(fInSize,fInSize), Position = UDim2.new(0.5,-fInSize/2,0.5,-fInSize/2), BackgroundColor3 = Color3.fromRGB(240,240,255), BackgroundTransparency = 0.1, ZIndex = 2 }, fcOuter); cr(fcInner, 999)
 
 	spBox.FocusLost:Connect(function()
 		local cleaned = tostring(spBox.Text):gsub(",", "."):match("%-?%d+%.?%d*")
@@ -253,49 +277,18 @@ local function openFreecam()
 		if hrp and fcPart then hrp.CFrame = fcPart.CFrame + Vector3.new(0, 3, 0) end
 	end)
 
-	tBtn.MouseButton1Click:Connect(function()
-		fcToggle = not fcToggle
-		if fcToggle then curPos = workspace.CurrentCamera.CFrame.Position; fcPart.CFrame = workspace.CurrentCamera.CFrame end
-		syncFc()
+	fcToggleBtn.MouseButton1Click:Connect(function()
+		setFreecamState(not fcEnabled)
 	end)
 
-	local function updFcJoy(pos)
-		local ctr = fOut.AbsolutePosition + fOut.AbsoluteSize * 0.5
-		local rad = fOutSize * 0.5
-		local d = pos - ctr
-		local mag = math.min(d.Magnitude, rad)
-		local off = d.Magnitude > 0 and d.Unit * mag or Vector2.zero
-		fIn.Position = UDim2.new(0.5, off.X - fInSize/2, 0.5, off.Y - fInSize/2)
-		fcLvl = math.floor((mag / rad) * 100)
-		fcDir = Vector3.new(off.X / rad, 0, off.Y / rad)
-	end
-
-	track(fOut.InputBegan:Connect(function(inp)
+	fcOuter.InputBegan:Connect(function(inp)
 		if not fcJoyAct and (inp.UserInputType == Enum.UserInputType.Touch or inp.UserInputType == Enum.UserInputType.MouseButton1) then
-			fcJoyAct, fcJoyTouch = true, inp; updFcJoy(inp.Position)
+			fcJoyAct, fcJoyTouch = true, inp
+			updFcJoy(inp.Position)
 		end
-	end))
-	track(UIS.InputChanged:Connect(function(inp) if fcJoyAct and inp == fcJoyTouch then updFcJoy(inp.Position) end end))
-	track(UIS.InputEnded:Connect(function(inp)
-		if fcJoyAct and inp == fcJoyTouch then
-			fcJoyAct, fcJoyTouch, fcLvl, fcDir = false, nil, 0, Vector3.zero
-			fIn.Position = UDim2.new(0.5, -fInSize/2, 0.5, -fInSize/2)
-		end
-	end))
+	end)
 
-	track(RunService.RenderStepped:Connect(function(dt)
-		if not fcGui.Enabled or not fcToggle or not fcPart then return end
-		local c = workspace.CurrentCamera
-		if fcLvl > 1 then
-			local moveSpd = (fcLvl * 0.02) * fcSpeed
-			local moveDir = (c.CFrame.LookVector * -fcDir.Z) + (c.CFrame.RightVector * fcDir.X) + Vector3.new(0, fcDir.Y, 0)
-			if moveDir.Magnitude > 0 then curPos += moveDir.Unit * moveSpd * dt * 60 end
-		end
-		local lk = c.CFrame.LookVector
-		fcPart.CFrame = CFrame.new(curPos) * CFrame.Angles(0, math.atan2(lk.X, lk.Z), 0)
-	end))
-
-	syncFc()
+	setFreecamState(true)
 	statusLbl.Text = tr("ok", "Freecam")
 end
 
@@ -327,12 +320,12 @@ local function switchTab(idx, instant)
 			if i == idx then
 				pg.Visible = true
 				if instant then pg.Position = UDim2.fromScale(0,0)
-				else pg.Position = UDim2.fromScale(dir*.22,0); TweenService:Create(pg, TweenInfo.new(.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = UDim2.fromScale(0,0) }):Play() end
+				else pg.Position = UDim2.fromScale(dir*.22,0); TweenService:Create(pg, twFast, { Position = UDim2.fromScale(0,0) }):Play() end
 			elseif pg.Visible then
 				local old = pg
 				if instant then old.Visible = false; old.Position = UDim2.fromScale(0,0)
 				else
-					local tw = TweenService:Create(old, TweenInfo.new(.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = UDim2.fromScale(-dir*.22,0) })
+					local tw = TweenService:Create(old, twFast, { Position = UDim2.fromScale(-dir*.22,0) })
 					tw:Play(); tw.Completed:Once(function() if curTab ~= i then old.Visible = false; old.Position = UDim2.fromScale(0,0) end end)
 				end
 			end
@@ -353,7 +346,7 @@ syncPill = function(instant)
 		local sb = segBtns[curTab] and segBtns[curTab].b; if not sb then return end
 		local gp, gs = UDim2.new(0, sb.AbsolutePosition.X - SegBar.AbsolutePosition.X, .5, -14), UDim2.new(0, sb.AbsoluteSize.X, 0, 28)
 		if instant then Pill.Position, Pill.Size = gp, gs
-		else TweenService:Create(Pill, TweenInfo.new(.2, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Position = gp, Size = gs }):Play() end
+		else TweenService:Create(Pill, twFast, { Position = gp, Size = gs }):Play() end
 	end)
 end
 
@@ -374,8 +367,8 @@ local function mkCard(par, tk, sk, dk, fn)
 	local s = mk("TextLabel", { Size = UDim2.new(1,-20,0,15), Position = UDim2.new(0,12,0,25), BackgroundTransparency = 1, Font = Enum.Font.Gotham, TextSize = 11, TextXAlignment = Enum.TextXAlignment.Left }, b)
 	table.insert(cards, { b = b, t = t, s = s, tk = tk, sk = sk, dk = dk })
 	b.MouseButton1Click:Connect(function()
-		TweenService:Create(b, TweenInfo.new(.1), { BackgroundColor3 = pal().a }):Play()
-		task.delay(.15, function() TweenService:Create(b, TweenInfo.new(.18), { BackgroundColor3 = dk and pal().d or pal().l }):Play() end)
+		TweenService:Create(b, twFast, { BackgroundColor3 = pal().a }):Play()
+		task.delay(.15, function() TweenService:Create(b, twFast, { BackgroundColor3 = dk and pal().d or pal().l }):Play() end)
 		fn()
 	end)
 end
@@ -385,7 +378,7 @@ local pHome = mkPage(true); HeroCard.Parent = pHome
 mkCard(pHome, "hScr", "hScrS", true, function() switchTab(2, false) end)
 
 -- SCRIPT
-local pScr = mkPage(false, 260); mkSec(pScr, "sScr")
+local pScr = mkPage(false, 240); mkSec(pScr, "sScr")
 mkCard(pScr, "av", "avS", true, function() runUrl("Avatar Copier", "https://api.lyraez.lol/loader") end)
 mkCard(pScr, "bd", "bdS", false, function() runUrl("Bundles FE", "https://api.luarmor.net/files/v4/loaders/2b1a1e4dd23e3419902187e162baf26f.lua") end)
 mkCard(pScr, "em", "emS", false, function() runUrl("Emotes & Anim", "https://raw.githubusercontent.com/7yd7/Hub/refs/heads/Branch/GUIS/Emotes.lua") end)
@@ -394,7 +387,7 @@ mkCard(pScr, "fc", "fcS", false, openFreecam)
 local rayParams = RaycastParams.new()
 rayParams.FilterType, rayParams.FilterDescendantsInstances = Enum.RaycastFilterType.Include, { Part }
 
-track(UIS.InputBegan:Connect(function(inp, gp)
+UIS.InputBegan:Connect(function(inp, gp)
 	if inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch then
 		local c = workspace.CurrentCamera
 		if dragOn and c and hubOpen and Gui.Enabled and Part.Parent then
@@ -409,37 +402,55 @@ track(UIS.InputBegan:Connect(function(inp, gp)
 	elseif not gp and inp.KeyCode == Enum.KeyCode.K then
 		hubOpen = not hubOpen; Gui.Enabled = hubOpen; if hubOpen then restore() end
 	end
-end))
+end)
 
-track(UIS.InputChanged:Connect(function(inp)
+UIS.InputChanged:Connect(function(inp)
+	if joyActive and inp == joyTouch then updateJoy(inp.Position) end
+	if fcJoyAct and inp == fcJoyTouch then updFcJoy(inp.Position) end
 	if isDrag and dragOn and (inp.UserInputType == Enum.UserInputType.MouseMovement or inp.UserInputType == Enum.UserInputType.Touch) then
 		local c = workspace.CurrentCamera; if not c then return end
 		local r = c:ViewportPointToRay(inp.Position.X, inp.Position.Y)
 		local cf = CFrame.lookAt(r.Origin + r.Direction * dragDist + dragOff, c.CFrame.Position, c.CFrame.UpVector) * CFrame.Angles(0, 0, tiltZ())
 		pinnedCF, curCF, Part.CFrame = cf, cf, cf
 	end
-end))
+end)
 
-track(UIS.InputEnded:Connect(function(inp)
+UIS.InputEnded:Connect(function(inp)
+	if joyActive and inp == joyTouch then resetJoy(); statusLbl.Text = tr("pnd") end
+	if fcJoyAct and inp == fcJoyTouch then
+		fcJoyAct, fcJoyTouch, fcLvl, fcDir = false, nil, 0, Vector3.zero
+		if fcInner then fcInner.Position = UDim2.new(0.5, -fcInner.AbsoluteSize.X/2, 0.5, -fcInner.AbsoluteSize.Y/2) end
+	end
 	if isDrag and (inp.UserInputType == Enum.UserInputType.MouseButton1 or inp.UserInputType == Enum.UserInputType.Touch) then
 		isDrag = false; if pinnedCF then curCF = pinnedCF end; statusLbl.Text = tr("pnd")
 	end
-end))
+end)
 
 refreshUI(); PinBtn.Text = followCam and tr("pin") or tr("pinned"); statusLbl.Text = tr("rdy")
 
-track(RunService.RenderStepped:Connect(function(dt)
-	if not Folder.Parent or not Part.Parent or isDrag then return end
-	if joyActive and joyVec.Magnitude > 0.02 then
-		local c = workspace.CurrentCamera
-		if c then
+RunService.RenderStepped:Connect(function(dt)
+	local c = workspace.CurrentCamera
+	if not c then return end
+
+	if Folder.Parent and Part.Parent and not isDrag then
+		if joyActive and joyVec.Magnitude > 0.02 then
 			local move = (c.CFrame.RightVector * joyVec.X - c.CFrame.UpVector * joyVec.Y) * (dt * 7)
 			pinnedCF = (pinnedCF or Part.CFrame) + move
 			curCF = curCF:Lerp(pinnedCF, math.clamp(dt * 14, 0, 1))
 			Part.CFrame = curCF
-			return
+		else
+			curCF = curCF:Lerp(followCam and targetCF() or (pinnedCF or curCF), math.clamp(dt * 9, 0, 1))
+			Part.CFrame = curCF
 		end
 	end
-	curCF = curCF:Lerp(followCam and targetCF() or (pinnedCF or curCF), math.clamp(dt * 9, 0, 1))
-	Part.CFrame = curCF
-end))
+
+	if fcActive and fcEnabled and fcPart and fcGui and fcGui.Enabled then
+		if fcLvl > 1 then
+			local moveSpd = (fcLvl * 0.02) * fcSpeed
+			local moveDir = (c.CFrame.LookVector * -fcDir.Z) + (c.CFrame.RightVector * fcDir.X) + Vector3.new(0, fcDir.Y, 0)
+			if moveDir.Magnitude > 0 then fcPos += moveDir.Unit * moveSpd * dt * 60 end
+		end
+		local lk = c.CFrame.LookVector
+		fcPart.CFrame = CFrame.new(fcPos) * CFrame.Angles(0, math.atan2(lk.X, lk.Z), 0)
+	end
+end)
